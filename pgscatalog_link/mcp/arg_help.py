@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import difflib
 import json
+import re
 from collections.abc import Iterable, Mapping
 from typing import Any
 
@@ -16,18 +17,16 @@ from typing import Any
 # alias only ever resolves to a canonical name that is a *real* parameter of the
 # tool being called (see ``normalize_alias_args``), so a shared map is safe.
 ARG_ALIASES: dict[str, str] = {
-    "gene": "query",
-    "gene_name": "query",
-    "symbol": "query",
-    "transcript": "transcript_id",
-    "enst": "transcript_id",
-    "id": "transcript_id",
-    "pos": "position",
-    "residue": "position",
-    "aa_position": "position",
+    "score_id": "pgs_id",
+    "pgs": "pgs_id",
+    "trait": "trait_id",
+    "efo_id": "trait_id",
+    "mondo_id": "trait_id",
+    "pgp_id": "publication_id",
+    "pubmed_id": "pmid",
+    "term": "query",
     "max": "limit",
-    "mode": "response_mode",
-    "domains": "requested_domains",
+    "page_size": "limit",
 }
 
 
@@ -108,6 +107,11 @@ def describe_constraints(field_schema: Mapping[str, Any]) -> tuple[list[str], st
             if field_schema.get("description"):
                 phrase += f" ({field_schema['description']})"
             return [f"{lo_s}..{hi_s} characters"], phrase
+    for node in nodes:  # a pattern with no length bounds (identifiers such as PGS000001)
+        if isinstance(node, Mapping) and node.get("pattern"):
+            example = _first_example(field_schema)
+            tail = f", e.g. {json.dumps(example)}" if example is not None else ""
+            return [node["pattern"]], f"must match {node['pattern']}{tail}"
     return None
 
 
@@ -182,3 +186,27 @@ def tool_signature(name: str, schema: Mapping[str, Any]) -> str:
     parts = [p for p in props if p in required]
     parts += [f"{p}=" for p in props if p not in required]
     return f"{name}(" + ", ".join(parts) + ")"
+
+
+_ID_PREFIX = {"pgs_id": "PGS", "publication_id": "PGP"}
+
+
+def corrected_value(loc: str, value: Any, field_schema: Mapping[str, Any]) -> Any:
+    """The unambiguous fix for a rejected value, or ``None``.
+
+    An integer outside its range is clamped to the nearest bound; a short catalog ID
+    (``PGS1``, ``18``) is zero-padded (``PGS000001``, ``PGS000018``).
+    """
+    if isinstance(value, int) and not isinstance(value, bool):
+        nodes = [field_schema, *field_schema.get("anyOf", [])]
+        lo = next((n["minimum"] for n in nodes if "minimum" in n), None)
+        hi = next((n["maximum"] for n in nodes if "maximum" in n), None)
+        if hi is not None and value > hi:
+            return hi
+        if lo is not None and value < lo:
+            return lo
+    if isinstance(value, str) and loc in _ID_PREFIX:
+        match = re.fullmatch(rf"(?i)(?:{_ID_PREFIX[loc]})?0*(\d{{1,6}})", value.strip())
+        if match:
+            return f"{_ID_PREFIX[loc]}{int(match.group(1)):06d}"
+    return None

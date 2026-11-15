@@ -26,8 +26,9 @@ an obsolete EFO trait ID answers an empty result instead of an error, and a page
 - **Errors that mean something.** An unknown score, trait or publication is `not_found`, never
   an empty success. An obsolete EFO trait (many moved to MONDO) is `not_found` naming
   `trait_id`, with a hint to look it up again via `resolve_trait`.
-- **Bounded and honest.** Pages hold at most 50 rows (25 performance records); `total` is the
-  exact upstream count and `truncated`/`next_offset` say whether more rows exist.
+- **Bounded and honest.** Pages hold at most 50 rows; `total` is the exact upstream count and
+  `truncated`/`next_offset` say whether more rows exist. List tools default to the fleet's
+  lean `response_mode=compact` (`minimal|compact|standard|full`).
 - **Provenance kept.** Each score's `license` is passed through verbatim (some are
   CC BY-NC-ND), its development/evaluation ancestry distribution is surfaced, and harmonized
   scoring files are linked, never streamed.
@@ -58,9 +59,9 @@ Use `unified` (the default) for MCP over HTTP; `--transport http` serves `/healt
 |------|---------|
 | `resolve_trait` | Free-text trait → EFO/MONDO/HP trait IDs with labels and score counts |
 | `get_trait` | One trait by ID, optionally with its child traits |
-| `search_scores` | Scores by `trait_id`, `publication_id`, `pmid`, a list of `pgs_ids`, or the whole catalog (paged) |
+| `search_scores` | Scores matching all given selectors (`trait_id`, `publication_id`/`pmid`, `pgs_ids`), or the whole catalog (paged) |
 | `get_score` | One score (`PGS000001`): trait, method, variant count, ancestry, licence, scoring-file links |
-| `get_score_performance` | Reported performance metrics (OR, HR, AUROC, C-index, ...) with sample sets |
+| `get_score_performance` | Reported performance metrics (OR, HR, AUROC, C-index, ...) with sample sets, optionally from one publication |
 | `get_publication` | One publication by PGP ID (`PGP000001`) or PubMed ID, with its scores |
 | `get_server_capabilities` | Discovery: limits, rate-limit policy, error codes, licence and citation |
 | `get_diagnostics` | Local runtime state: request budget, cache hits, latency |

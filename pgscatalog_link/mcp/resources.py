@@ -16,9 +16,12 @@ RATE_LIMIT_POLICY = (
 
 PGS_TERMS_URL = "https://www.ebi.ac.uk/about/terms-of-use/"
 PGS_CITATION = (
-    "Lambert SA, Wingfield B, Gibson JT, et al. Enhancing the Polygenic Score Catalog with "
-    "tools for score calculation and ancestry normalization. Nat Genet. 2024. "
-    "doi:10.1038/s41588-024-01937-x"
+    "Lambert SA, Gil L, Jupp S, et al. The Polygenic Score Catalog as an open database for "
+    "reproducibility and systematic evaluation. Nat Genet. 2021;53:420-425. "
+    "doi:10.1038/s41588-021-00783-5; and Lambert SA, Wingfield B, Gibson JT, et al. "
+    "Enhancing the Polygenic Score Catalog with tools for score calculation and ancestry "
+    "normalization. Nat Genet. 2024. doi:10.1038/s41588-024-01937-x. Also cite each "
+    "score's own publication."
 )
 
 PGS_SERVER_INSTRUCTIONS = (

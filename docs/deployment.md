@@ -95,7 +95,7 @@ transport guard and browser CORS are independent controls.
 **Why 0.6 s.** The PGS Catalog publishes no hard request limit (none found 2026-11-15); 0.6 s
 spacing (~100/min) is a conservative choice for a shared EMBL-EBI service. The limiter is per
 process: run one replica, or divide the budget between replicas. Upstream pages hold at most
-250 rows (`limit` > 250 is a 400); the tools cap `limit` at 50 (25 for performance records).
+250 rows (`limit` > 250 is a 400); the tools cap `limit` at 50.
 
 ### Live integration checks
 

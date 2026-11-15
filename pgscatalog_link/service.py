@@ -17,19 +17,22 @@ from pgscatalog_link.shaping import (
     PGP_ID,
     PGS_ID,
     TRAIT_ID,
+    compact_samples,
+    factor_license,
+    match_kind,
     page_block,
     performance_row,
     publication_detail,
     score_detail,
-    score_summary,
+    score_row,
     trait_detail,
     trait_summary,
 )
 
 DEFAULT_LIMIT = 10
 MAX_LIMIT = 50
-#: Performance rows carry up to three fenced prose fields each (128-object fence cap).
-MAX_PERFORMANCE_LIMIT = 25
+#: One fenced `reported` block per performance row keeps 50 rows under the 128-fence cap.
+MAX_PERFORMANCE_LIMIT = 50
 MAX_PGS_IDS = 50
 
 
@@ -112,14 +115,28 @@ class PgsService:
             "/trait/search", {"term": term, "limit": limit, "offset": offset}
         )
         rows, count = _results(page)
-        items = [trait_summary(r) for r in rows]
-        return await self._stamp(
-            {
-                "query": term,
-                "traits": items,
-                **page_block(total=count, returned=len(items), limit=limit, offset=offset),
-            }
-        )
+        items = [{**trait_summary(r), "match": match_kind(r, term)} for r in rows]
+        payload: dict[str, Any] = {
+            "query": term,
+            "traits": items,
+            **page_block(total=count, returned=len(items), limit=limit, offset=offset),
+        }
+        exact = [t["id"] for t in items if t["match"] != "partial"]
+        if count == 0 and TRAIT_ID.fullmatch(term):
+            payload["hint"] = (
+                "No current catalog trait has this ID. IDs the catalog retired (many EFO "
+                "terms moved to MONDO) are not mapped to their replacement: search by the "
+                "trait's name instead."
+            )
+        elif count == 0:
+            payload["hint"] = "No trait matched; try a broader name or a synonym."
+        elif len(exact) > 1:
+            payload["hint"] = (
+                f"{len(exact)} traits match this name exactly ({', '.join(exact)}); they are "
+                "different ontology terms (often parent and child): compare their labels and "
+                "score counts, or use get_trait(include_children=true)."
+            )
+        return await self._stamp(payload)
 
     async def _trait(self, trait_id: str) -> dict[str, Any]:
         tid = _check(trait_id, TRAIT_ID, "trait_id", "MONDO_0004989")
@@ -144,33 +161,53 @@ class PgsService:
         publication_id: str | None,
         pmid: int | None,
         pgs_ids: list[str] | None,
-    ) -> tuple[dict[str, Any], list[str]]:
-        given = [v is not None for v in (trait_id, publication_id, pmid, pgs_ids)]
-        if sum(given) > 1:
-            raise InvalidInputError(
-                "Give at most one of `trait_id`, `publication_id`, `pmid` or `pgs_ids`.",
-                field="trait_id",
-            )
+    ) -> tuple[dict[str, Any], list[str], list[str]]:
+        """(selector, matching score IDs in PGS ID order, requested pgs_ids that don't exist)."""
         if include_children and trait_id is None:
             raise InvalidInputError(
                 "`include_children` only applies with `trait_id`.", field="include_children"
             )
+        selector: dict[str, Any] = {}
+        sets: list[set[str]] = []
+        missing: list[str] = []
         if trait_id is not None:
             raw = await self._trait(trait_id)
             ids = set(raw.get("associated_pgs_ids") or [])
             if include_children:
                 ids |= set(raw.get("child_associated_pgs_ids") or [])
-            selector = {"trait_id": raw["id"], "include_children": include_children}
-            return selector, sorted(ids)
+            selector.update(trait_id=raw["id"], include_children=include_children)
+            sets.append(ids)
+        if publication_id is not None or pmid is not None:
+            pub = await self._publication(publication_id, pmid)
+            associated = pub.get("associated_pgs_ids") or {}
+            selector["publication_id"] = pub["id"]
+            if pmid is not None:
+                selector["pmid"] = pmid
+            sets.append(
+                set(associated.get("development") or []) | set(associated.get("evaluation") or [])
+            )
         if pgs_ids is not None:
             if not 1 <= len(pgs_ids) <= MAX_PGS_IDS:
                 raise InvalidInputError(f"`pgs_ids` takes 1-{MAX_PGS_IDS} IDs.", field="pgs_ids")
-            wanted = [_check(v, PGS_ID, "pgs_ids", "PGS000001") for v in pgs_ids]
-            return {"pgs_ids": wanted}, list(dict.fromkeys(wanted))
-        pub = await self._publication(publication_id, pmid)
-        associated = pub.get("associated_pgs_ids") or {}
-        ids = set(associated.get("development") or []) | set(associated.get("evaluation") or [])
-        return {"publication_id": pub["id"]}, sorted(ids)
+            wanted = list(dict.fromkeys(_check(v, PGS_ID, "pgs_ids", "PGS000001") for v in pgs_ids))
+            selector["pgs_ids"] = wanted
+            if not sets:  # an explicit list keeps the caller's order
+                known = await self._fetch_scores(wanted)
+                missing = [i for i in wanted if i not in known]
+            else:
+                outside = [i for i in wanted if not all(i in x for x in sets)]
+                known = await self._fetch_scores(outside)
+                missing = [i for i in outside if i not in known]
+            if len(missing) == len(wanted):
+                raise NotFoundError(
+                    "None of the requested `pgs_ids` exist in the PGS Catalog.", field="pgs_ids"
+                )
+            if not sets:
+                return selector, [i for i in wanted if i not in missing], missing
+            sets.append(set(wanted))
+        if len(sets) > 1:  # why an AND result is small or empty
+            selector["matches_per_selector"] = [len(x) for x in sets]
+        return selector, sorted(set.intersection(*sets)), missing
 
     async def search_scores(
         self,
@@ -182,49 +219,57 @@ class PgsService:
         pgs_ids: list[str] | None = None,
         limit: int = DEFAULT_LIMIT,
         offset: int = 0,
+        response_mode: str = "compact",
     ) -> dict[str, Any]:
-        """Scores selected by exactly one of trait, publication or an explicit ID list."""
+        """Scores matching every given selector (trait, publication, ID list); none = all."""
+
+        def shape(raw: dict[str, Any]) -> dict[str, Any]:
+            return score_row(raw, response_mode)
+
         _page_args(limit, offset, MAX_LIMIT)
         if not any(v is not None for v in (trait_id, publication_id, pmid, pgs_ids)):
             if include_children:
                 raise InvalidInputError(
                     "`include_children` only applies with `trait_id`.", field="include_children"
                 )
-            return await self._all_scores(limit, offset)
-        selector, ids = await self._ids_for(
+            return await self._all_scores(limit, offset, shape)
+        selector, ids, missing = await self._ids_for(
             trait_id, include_children, publication_id, pmid, pgs_ids
         )
         window = ids[offset : offset + limit]
-        found: dict[str, dict[str, Any]] = {}
-        if window:
-            page = await self.client.get_json(
-                "/score/search", {"pgs_ids": ",".join(window), "limit": len(window)}
-            )
-            found = {str(r.get("id")): r for r in _results(page)[0]}
-        missing = [i for i in window if i not in found]
-        if pgs_ids is not None and window and not found:
-            raise NotFoundError(
-                "None of the requested `pgs_ids` exist in the PGS Catalog.", field="pgs_ids"
-            )
-        items = [score_summary(found[i]) for i in window if i in found]
+        found = await self._fetch_scores(window)
+        items = [shape(found[i]) for i in window if i in found]
         payload = {
             "selector": selector,
+            "license_default": factor_license(items),
             "scores": items,
+            # page over the ID window so an ID upstream drops can never stall next_offset
             **page_block(total=len(ids), returned=len(window), limit=limit, offset=offset),
-            "returned": len(items),  # paging counts IDs; missing ones are listed below
+            "returned": len(items),
         }
+        missing += [i for i in window if i not in found]
         if missing:
             payload["missing_pgs_ids"] = missing
         return await self._stamp(payload)
 
-    async def _all_scores(self, limit: int, offset: int) -> dict[str, Any]:
+    async def _fetch_scores(self, ids: list[str]) -> dict[str, dict[str, Any]]:
+        """Score records by ID in one request (<= 50 IDs); unknown IDs are simply absent."""
+        if not ids:
+            return {}
+        page = await self.client.get_json(
+            "/score/search", {"pgs_ids": ",".join(ids), "limit": len(ids)}
+        )
+        return {str(r.get("id")): r for r in _results(page)[0]}
+
+    async def _all_scores(self, limit: int, offset: int, shape: Any) -> dict[str, Any]:
         """No selector: page through the whole catalog in its native (PGS ID) order."""
         page = await self.client.get_json("/score/all", {"limit": limit, "offset": offset})
         rows, count = _results(page)
-        items = [score_summary(r) for r in rows]
+        items = [shape(r) for r in rows]
         return await self._stamp(
             {
                 "selector": {"all": True},
+                "license_default": factor_license(items),
                 "scores": items,
                 **page_block(total=count, returned=len(items), limit=limit, offset=offset),
             }
@@ -238,51 +283,74 @@ class PgsService:
         )
         return await self._stamp({"score": score_detail(raw)})
 
-    async def get_score_performance(self, pgs_id: str, limit: int, offset: int) -> dict[str, Any]:
-        """Published performance metrics (PPM) of one score, with evaluation samples."""
+    async def get_score_performance(
+        self,
+        pgs_id: str,
+        limit: int,
+        offset: int,
+        publication_id: str | None = None,
+        response_mode: str = "compact",
+    ) -> dict[str, Any]:
+        """Published performance metrics (PPM) of one score, optionally from one publication."""
         _page_args(limit, offset, MAX_PERFORMANCE_LIMIT)
         sid = _check(pgs_id, PGS_ID, "pgs_id", "PGS000001")
-        page = await self.client.get_json(
-            "/performance/search", {"pgs_id": sid, "limit": limit, "offset": offset}
-        )
-        rows, count = _results(page)
-        if count == 0:  # unknown score vs a score with no metrics: ask the score itself
+        params: dict[str, Any] = {"pgs_id": sid, "limit": limit, "offset": offset}
+        if publication_id is not None:
+            params["pgp_id"] = _check(publication_id, PGP_ID, "publication_id", "PGP000001")
+        rows, count = _results(await self.client.get_json("/performance/search", params))
+        if count == 0:  # an unknown ID vs genuinely no metrics: never a silent empty filter
             await self._record(
                 f"/score/{sid}", "pgs_id", sid, "Find scores with search_scores(trait_id=...)."
             )
-        items = [performance_row(r) for r in rows]
+            if publication_id is not None:
+                await self._publication(params["pgp_id"], None)
+        items = [performance_row(r, response_mode) for r in rows]
+        extra: dict[str, Any] = {}
+        if response_mode == "compact":  # records often share a cohort: list each set once
+            extra["samplesets"] = {
+                str(r["sampleset"]["id"]): compact_samples(r)
+                for r in rows
+                if isinstance(r.get("sampleset"), dict) and r["sampleset"].get("id")
+            }
         return await self._stamp(
             {
                 "pgs_id": sid,
+                "publication_id": params.get("pgp_id"),
                 "performance": items,
+                **extra,
                 **page_block(total=count, returned=len(items), limit=limit, offset=offset),
             }
         )
 
-    async def _publication(self, publication_id: str | None, pmid: int | None) -> dict[str, Any]:
+    async def _publication(
+        self, publication_id: str | None, pmid: int | None, field: str | None = None
+    ) -> dict[str, Any]:
         if (publication_id is None) == (pmid is None):
             raise InvalidInputError(
                 "Give exactly one of `publication_id` or `pmid`.", field="publication_id"
             )
         if publication_id is not None:
-            pid = _check(publication_id, PGP_ID, "publication_id", "PGP000001")
+            pid = _check(publication_id, PGP_ID, field or "publication_id", "PGP000001")
             return await self._record(
-                f"/publication/{pid}", "publication_id", pid, "Look the paper up by `pmid` instead."
+                f"/publication/{pid}",
+                field or "publication_id",
+                pid,
+                "Look the paper up by its PubMed ID instead.",
             )
         if pmid is None or pmid < 1:
-            raise InvalidInputError("`pmid` must be a positive integer.", field="pmid")
+            raise InvalidInputError("`pmid` must be a positive integer.", field=field or "pmid")
         rows, _ = _results(await self.client.get_json("/publication/search", {"pmid": pmid}))
         if not rows:
             raise NotFoundError(
-                f"The PGS Catalog has no publication with `pmid` {pmid}.",
-                field="pmid",
+                f"The PGS Catalog has no publication with PubMed ID {pmid}.",
+                field=field or "pmid",
                 hint="Only papers that publish or evaluate a PGS are in the catalog.",
             )
         return rows[0]
 
     async def get_publication(
-        self, publication_id: str | None = None, pmid: int | None = None
+        self, publication_id: str | None = None, pmid: int | None = None, field: str | None = None
     ) -> dict[str, Any]:
         """One catalog publication and the scores it developed or evaluated."""
-        raw = await self._publication(publication_id, pmid)
+        raw = await self._publication(publication_id, pmid, field)
         return await self._stamp({"publication": publication_detail(raw)})

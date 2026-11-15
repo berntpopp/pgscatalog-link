@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-15
+
+Driven by five rounds of agent UX evaluation (Claude Code, Codex CLI, Antigravity) with only
+this server mounted; protocol and results in `docs/benchmarks/`.
+
+### Added
+
+- `response_mode` (`minimal|compact|standard|full`, default `compact`) on `search_scores` and
+  `get_score_performance`, per the fleet Response-Envelope Standard. Compact performance pages
+  list each evaluation sample set once (`samplesets`).
+- `get_score_performance(publication_id=)` keeps only one paper's records.
+- `search_scores` selectors combine with AND (`trait_id` + `pmid`, ...), echo
+  `matches_per_selector`, and report unknown `pgs_ids` as `missing_pgs_ids`.
+- `resolve_trait` rows carry `match` (label, synonym or partial); a hint flags several exact
+  matches, a retired ontology ID and an empty name search.
+- Argument errors name the pattern and give a ready-to-run corrected call (zero-padded IDs,
+  clamped limits, `resolve_trait(query=...)` for a trait name passed as `trait_id`).
+- `get_server_capabilities.ancestry_legend`; the 2021 catalog paper in `recommended_citation`.
+
+### Changed
+
+- Trait counts are `score_count` and `score_count_with_descendants` (inclusive);
+  `descendant_score_count` is gone.
+- The standard catalog licence is stated once per page (`license_default`); other licences
+  stay on their row verbatim.
+- Performance prose is fenced once per row as `reported` (standard/full); `limit` is capped
+  at 50 for every tool.
+- `get_trait` lists the first 50 score IDs (`pgs_ids_truncated`); `get_score` lists cohorts
+  once per score; cohort and author lists are capped with counts.
+- `get_publication` accepts a PubMed ID as a number; its errors name `publication`.
+
+
 ## [0.1.0] - 2026-11-15
 
 ### Added

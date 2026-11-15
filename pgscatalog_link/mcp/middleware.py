@@ -23,6 +23,7 @@ from pydantic import ValidationError
 
 from pgscatalog_link.mcp._sanitize import sanitize_message
 from pgscatalog_link.mcp.arg_help import (
+    corrected_value,
     describe_constraints,
     describe_type_expectation,
     did_you_mean,
@@ -30,6 +31,7 @@ from pgscatalog_link.mcp.arg_help import (
     tool_signature,
 )
 from pgscatalog_link.mcp.envelope import build_arg_error_envelope
+from pgscatalog_link.mcp.next_commands import cmd
 
 logger = logging.getLogger(__name__)
 
@@ -72,7 +74,7 @@ class ArgValidationMiddleware(Middleware):
             validation_error = exc if isinstance(exc, ValidationError) else exc.__cause__
             if not isinstance(validation_error, ValidationError):
                 raise
-            return self._error_result(name, valid, schema, validation_error)
+            return self._error_result(name, valid, schema, validation_error, new_args)
 
         if (
             applied
@@ -89,6 +91,7 @@ class ArgValidationMiddleware(Middleware):
         valid: list[str],
         schema: dict[str, Any],
         exc: ValidationError,
+        arguments: dict[str, Any],
     ) -> ToolResult:
         first = exc.errors(include_url=False)[0]
         loc = ".".join(str(p) for p in first.get("loc", ())) or "input"
@@ -112,6 +115,19 @@ class ArgValidationMiddleware(Middleware):
             suggestion=suggestion,
             constraints=constraints,
         )
+        if constraints is not None:
+            fixed = corrected_value(loc, arguments.get(loc), field_schema)
+            # Echo only real parameters, and only when nothing in them needs sanitising.
+            known = {k: v for k, v in arguments.items() if k in valid}
+            blob = json.dumps(known, ensure_ascii=False, default=str)
+            value = arguments.get(loc)
+            if sanitize_message(blob) != blob:
+                pass  # never echo unsanitised caller text
+            elif fixed is not None:
+                envelope["_meta"]["next_commands"] = [cmd(name, **{**known, loc: fixed})]
+            elif loc == "trait_id" and isinstance(value, str) and 2 <= len(value.strip()) <= 200:
+                # a trait *name* where an ontology ID belongs: resolve it first
+                envelope["_meta"]["next_commands"] = [cmd("resolve_trait", query=value.strip())]
         # ``loc`` is a caller-controlled argument name; code-point-strip it before
         # it reaches the log sink (no raw control/zero-width/bidi/NUL in logs).
         logger.warning(

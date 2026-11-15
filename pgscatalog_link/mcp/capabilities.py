@@ -42,6 +42,25 @@ TOOLS: list[str] = [
 _HASH_EXCLUDE = frozenset({"build", "capabilities_version"})
 
 
+#: The catalog's broad ancestry codes (GET /rest/ancestry_categories). In
+#: ancestry_distribution each stage (gwas = source GWAS, dev = score development,
+#: eval = evaluation) gives `dist` (% of individuals per code) and `count`; `multi`
+#: (get_score only) breaks MAE/MAO down. A missing stage means none was reported.
+ANCESTRY_LEGEND: dict[str, str] = {
+    "AFR": "African",
+    "AMR": "Hispanic or Latin American",
+    "ASN": "Additional Asian ancestries",
+    "EAS": "East Asian",
+    "EUR": "European",
+    "GME": "Greater Middle Eastern",
+    "MAE": "Multi-ancestry (including European)",
+    "MAO": "Multi-ancestry (excluding European)",
+    "OTH": "Additional diverse ancestries",
+    "SAS": "South Asian",
+    "NR": "Not reported",
+}
+
+
 def build_capabilities() -> dict[str, Any]:
     """The static discovery contract describing this server."""
     payload: dict[str, Any] = {
@@ -68,7 +87,9 @@ def build_capabilities() -> dict[str, Any]:
         "rate_limit_policy": RATE_LIMIT_POLICY,
         "caching": "in-process only (TTL); no data snapshot is stored or redistributed",
         "terms_of_use": PGS_TERMS_URL,
-        "licence_note": "each score carries its author-set `license`, passed through verbatim",
+        "licence_note": "each score carries its author-set `license`, passed through "
+        "verbatim; search_scores states the page's common licence once (license_default)",
+        "ancestry_legend": ANCESTRY_LEGEND,
         "recommended_citation": PGS_CITATION,
         "research_use_only": True,
         "research_use_notice": RESEARCH_USE_NOTICE,
@@ -83,6 +104,8 @@ def build_capabilities() -> dict[str, Any]:
             "get_trait(trait_id, include_children=true) -> search_scores(trait_id, "
             "include_children=true)",
             "get_publication(publication) -> search_scores(publication_id)",
+            "get_score(pgs_id) -> get_score_performance(pgs_id, publication_id=<its "
+            "source publication>) for the authors' own evaluation",
         ],
     }
     blob = json.dumps({k: v for k, v in payload.items() if k not in _HASH_EXCLUDE}, sort_keys=True)
