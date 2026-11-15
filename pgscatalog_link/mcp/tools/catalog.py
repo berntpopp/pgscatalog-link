@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
-from typing import TYPE_CHECKING, Annotated, Any
+from typing import TYPE_CHECKING, Annotated, Any, Literal, get_args
 
 from pydantic import Field, StrictBool, StrictInt
 
@@ -17,6 +17,7 @@ from pgscatalog_link.service import (
     MAX_PERFORMANCE_LIMIT,
     MAX_PGS_IDS,
 )
+from pgscatalog_link.shaping import RESPONSE_MODES
 
 if TYPE_CHECKING:
     from fastmcp import FastMCP
@@ -65,6 +66,10 @@ PerfLimit = Annotated[
 ]
 
 
+ResponseModeValue = Literal["minimal", "compact", "standard", "full"]
+assert get_args(ResponseModeValue) == RESPONSE_MODES
+
+
 def _paged(payload: dict[str, Any], tool: str, args: dict[str, Any]) -> list[dict[str, Any]]:
     """Next page first when truncated."""
     if payload.get("next_offset") is not None:
@@ -95,10 +100,13 @@ def register_catalog_tools(mcp: FastMCP) -> None:
         output_schema=None,
         tags={"traits"},
         description=(
-            "Find PGS Catalog traits by name, synonym or ontology ID (EFO/MONDO/HP) and "
-            "return their catalog trait_id, categories and how many scores map to each "
-            "(directly and via descendant traits). Start here: other tools need the "
-            "catalog's trait_id. Signature: resolve_trait(query, limit=, offset=)."
+            "Find PGS Catalog traits by name, synonym or current ontology ID (EFO/MONDO/HP) "
+            "and return each trait_id with its categories, match (label, synonym or partial; "
+            "a hint flags several exact matches), score_count (scores mapped "
+            "directly) and score_count_with_descendants (direct + descendant traits; what "
+            "search_scores(include_children=true) returns). Start here: other tools need "
+            "the catalog's trait_id. Retired IDs are not mapped: search by name. "
+            "Signature: resolve_trait(query, limit=, offset=)."
         ),
     )
     async def resolve_trait(
@@ -133,9 +141,10 @@ def register_catalog_tools(mcp: FastMCP) -> None:
         output_schema=None,
         tags={"traits"},
         description=(
-            "Return one trait: label, synonyms, categories, description and the PGS IDs "
-            "mapped to it; include_children adds the scores of descendant traits and the "
-            "child traits themselves. An unknown or retired ID is not_found. "
+            "Return one trait: label, synonyms, categories, description, score counts and "
+            "the first 50 PGS IDs mapped to it (pgs_ids_truncated says if there are more: "
+            "page them with search_scores(trait_id)); include_children adds descendant "
+            "traits and their score IDs. An unknown or retired ID is not_found. "
             "Signature: get_trait(trait_id, include_children=)."
         ),
     )
@@ -159,12 +168,16 @@ def register_catalog_tools(mcp: FastMCP) -> None:
         output_schema=None,
         tags={"scores"},
         description=(
-            "List polygenic scores selected by at most one of trait_id, publication_id, "
-            "pmid or pgs_ids (none: the whole catalog in PGS ID order). Each row: trait, method, variant count, genome build, "
-            "development/evaluation ancestry distribution, source publication and the "
-            "author-set licence. `total` is exact; page with offset. "
+            "List polygenic scores matching ALL given selectors: trait_id (+include_children), "
+            "publication_id or pmid, pgs_ids; none lists the whole catalog. Rows are in PGS "
+            "ID order (pgs_ids alone keeps your order). Each row: trait, method, variant "
+            "count, genome build, ancestry % per stage (gwas/dev/eval; codes in "
+            "get_server_capabilities.ancestry_legend; no `dev` = no separate development "
+            "sample reported) and source publication. Rows under the catalog's standard terms "
+            "omit `license` (stated once as license_default); any other licence is shown "
+            "on its row verbatim. `total` is exact; page with offset. "
             "Signature: search_scores(trait_id=, include_children=, publication_id=, "
-            "pmid=, pgs_ids=, limit=, offset=)."
+            "pmid=, pgs_ids=, response_mode=, limit=, offset=)."
         ),
     )
     async def search_scores(
@@ -190,6 +203,14 @@ def register_catalog_tools(mcp: FastMCP) -> None:
                 examples=[["PGS000001", "PGS000002"]],
             ),
         ] = None,
+        response_mode: Annotated[
+            ResponseModeValue,
+            Field(
+                description="minimal: id and name | compact (default): + trait_reported, "
+                "method, variant count, build, ancestry %, publication | standard/full: + "
+                "mapped traits, weight type, release date, URL and ancestry sample counts."
+            ),
+        ] = "compact",
         limit: Limit = DEFAULT_LIMIT,
         offset: Offset = 0,
     ) -> ToolReturn:
@@ -197,6 +218,7 @@ def register_catalog_tools(mcp: FastMCP) -> None:
             k: v
             for k, v in {
                 "trait_id": trait_id,
+                "response_mode": None if response_mode == "compact" else response_mode,
                 "include_children": include_children or None,
                 "publication_id": publication_id,
                 "pmid": pmid,
@@ -222,6 +244,7 @@ def register_catalog_tools(mcp: FastMCP) -> None:
                 pgs_ids=pgs_ids,
                 limit=limit,
                 offset=offset,
+                response_mode=response_mode,
             ),
             steps,
         )
@@ -235,7 +258,10 @@ def register_catalog_tools(mcp: FastMCP) -> None:
             "Return full metadata of one polygenic score: traits, method and parameters, "
             "variant count and genome build, GWAS/training samples with ancestry, the "
             "author-set licence, source publication, and download links for the original "
-            "and harmonized (GRCh37/GRCh38) scoring files. Weights are not inlined. "
+            "and harmonized (GRCh37/GRCh38) scoring files. variants_number counts the "
+            "original file; harmonized files may map fewer. Weights are not inlined, and "
+            "this server does not compute scores (use the files with the catalog's "
+            "pgsc_calc). "
             "Signature: get_score(pgs_id)."
         ),
     )
@@ -256,18 +282,51 @@ def register_catalog_tools(mcp: FastMCP) -> None:
             "Return the published performance metrics of one score: effect sizes (OR/HR/"
             "beta), classification accuracy (AUROC, C-index) and other metrics, each with "
             "its evaluation sample set (size, cases/controls, ancestry, cohorts) and "
-            "covariates. A score with no published metrics returns total 0; an unknown "
-            "score is not_found. Signature: get_score_performance(pgs_id, limit=, offset=)."
+            "covariates, in PPM ID order. publication_id keeps "
+            "only the records from one paper (e.g. the score's source publication from "
+            "get_score). The default response_mode=compact gives metrics with short names "
+            "and lists each evaluation sample set once (samplesets, keyed by the row's "
+            "sampleset ID); standard/full add the samples inline and the fenced prose. "
+            "limit=1 just reads `total`. A score with no "
+            "published metrics returns total 0; an unknown score or publication is "
+            "not_found. Signature: get_score_performance(pgs_id, publication_id=, response_mode=, "
+            "limit=, offset=)."
         ),
     )
     async def get_score_performance(
-        pgs_id: RequiredPgsId, limit: PerfLimit = DEFAULT_LIMIT, offset: Offset = 0
+        pgs_id: RequiredPgsId,
+        publication_id: Annotated[
+            PublicationId | None,
+            Field(description="Only records from this PGP publication."),
+        ] = None,
+        response_mode: Annotated[
+            ResponseModeValue,
+            Field(
+                description="minimal: record and sampleset IDs with metrics | compact "
+                "(default): + publication and a page-level samplesets table | standard/full: "
+                "samples inline (with country) and the fenced phenotype/covariates/comments."
+            ),
+        ] = "compact",
+        limit: PerfLimit = DEFAULT_LIMIT,
+        offset: Offset = 0,
     ) -> ToolReturn:
-        args = {"pgs_id": pgs_id, "limit": limit, "offset": offset}
+        args = {
+            k: v
+            for k, v in {
+                "pgs_id": pgs_id,
+                "publication_id": publication_id,
+                "response_mode": None if response_mode == "compact" else response_mode,
+                "limit": limit,
+                "offset": offset,
+            }.items()
+            if v is not None
+        }
         return await _run(
             "get_score_performance",
             args,
-            lambda: get_pgs_service().get_score_performance(pgs_id, limit, offset),
+            lambda: get_pgs_service().get_score_performance(
+                pgs_id, limit, offset, publication_id, response_mode
+            ),
             lambda p: (
                 _paged(p, "get_score_performance", args) or [cmd("get_score", pgs_id=p["pgs_id"])]
             ),
@@ -286,20 +345,21 @@ def register_catalog_tools(mcp: FastMCP) -> None:
     )
     async def get_publication(
         publication: Annotated[
-            str,
+            Annotated[str, Field(pattern=r"^([Pp][Gg][Pp]\d{6}|[1-9]\d{0,8})$")]
+            | Annotated[StrictInt, Field(ge=1, le=999_999_999)],
             Field(
-                pattern=r"^([Pp][Gg][Pp]\d{6}|[1-9]\d{0,8})$",
-                description="PGP publication ID (PGP000001) or a PubMed ID (25855707).",
+                description="PGP publication ID (PGP000001) or a PubMed ID, as a number "
+                "or a string (25855707).",
                 examples=["PGP000001"],
             ),
         ],
     ) -> ToolReturn:
         args = {"publication": publication}
-        is_pmid = publication.isdigit()
-        publication_id, pmid = (None, int(publication)) if is_pmid else (publication, None)
+        ref = str(publication)
+        publication_id, pmid = (None, int(ref)) if ref.isdigit() else (ref, None)
         return await _run(
             "get_publication",
             args,
-            lambda: get_pgs_service().get_publication(publication_id, pmid),
+            lambda: get_pgs_service().get_publication(publication_id, pmid, "publication"),
             lambda p: [cmd("search_scores", publication_id=p["publication"]["id"])],
         )

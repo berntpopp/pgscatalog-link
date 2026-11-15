@@ -267,7 +267,7 @@ def build_arg_error_envelope(
         allowed, human = constraints
         message = f"Invalid value for argument `{loc}` of {tool_name}: {human}."
         meta = _new_meta(tool_name)
-        meta["next_commands"] = [cmd("get_server_capabilities")]
+        meta["next_commands"] = []  # the message states the fix; a capabilities call adds nothing
         return {
             "success": False,
             "error_code": "invalid_input",

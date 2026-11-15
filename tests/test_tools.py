@@ -56,14 +56,18 @@ async def test_search_scores_paging_suggests_next_page(facade: Any, call_tool: A
     }
 
 
-async def test_malformed_pgs_id_is_invalid_input(facade: Any) -> None:
+async def test_malformed_pgs_id_names_the_pattern(facade: Any) -> None:
     res = await _raw(facade, "get_score", {"pgs_id": "PGS1"})
-    assert res.is_error is True
-    assert res.structured_content["error_code"] == "invalid_input"
+    body = res.structured_content
+    assert res.is_error is True and body["error_code"] == "invalid_input"
+    assert "must match" in body["message"] and '"PGS000001"' in body["message"]
+    assert body["_meta"]["next_commands"] == [
+        {"tool": "get_score", "arguments": {"pgs_id": "PGS000001"}}
+    ]
 
 
 async def test_performance_limit_cap_is_enforced(facade: Any) -> None:
-    res = await _raw(facade, "get_score_performance", {"pgs_id": "PGS000001", "limit": 26})
+    res = await _raw(facade, "get_score_performance", {"pgs_id": "PGS000001", "limit": 51})
     assert res.is_error is True
     assert res.structured_content["error_code"] == "invalid_input"
 
@@ -76,6 +80,39 @@ async def test_capabilities_and_diagnostics(facade: Any, call_tool: Any) -> None
 
 
 async def test_get_publication_accepts_pgp_id_or_pmid(facade: Any, call_tool: Any) -> None:
-    for ref in ("PGP000001", "25855707"):
+    for ref in ("PGP000001", "25855707", 25855707):
         out = await call_tool(facade, "get_publication", {"publication": ref})
         assert out["publication"]["id"] == "PGP000001"
+
+
+async def test_unknown_pmid_error_names_the_publication_argument(facade: Any) -> None:
+    res = await _raw(facade, "get_publication", {"publication": 1})
+    assert res.is_error is True
+    assert res.structured_content["error_code"] == "not_found"
+    assert res.structured_content["field"] == "publication"
+
+
+async def test_over_cap_limit_suggests_the_clamped_call(facade: Any) -> None:
+    args = {"trait_id": "MONDO_0004989", "limit": 500}
+    res = await _raw(facade, "search_scores", args)
+    assert res.is_error is True
+    assert res.structured_content["_meta"]["next_commands"] == [
+        {"tool": "search_scores", "arguments": {**args, "limit": 50}}
+    ]
+
+
+async def test_fix_suggestion_keeps_prefix_and_drops_unknown_or_dirty_args(facade: Any) -> None:
+    res = await _raw(facade, "get_score", {"pgs_id": "PGP000001"})  # a publication ID
+    assert res.structured_content["_meta"]["next_commands"] == []
+    res = await _raw(facade, "get_score", {"pgs_id": "PGS18", "junk": "x\u202ey"})
+    assert res.structured_content["_meta"]["next_commands"] == [
+        {"tool": "get_score", "arguments": {"pgs_id": "PGS000018"}}
+    ]
+
+
+async def test_trait_name_in_trait_id_suggests_resolve_trait(facade: Any) -> None:
+    res = await _raw(facade, "get_trait", {"trait_id": "breast cancer"})
+    assert res.is_error is True
+    assert res.structured_content["_meta"]["next_commands"] == [
+        {"tool": "resolve_trait", "arguments": {"query": "breast cancer"}}
+    ]

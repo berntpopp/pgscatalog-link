@@ -31,8 +31,8 @@ https://github.com/berntpopp/genefoundry-router/issues/288.
   or publication; the data plane maps that to `not_found`, never an empty success.
 - **Obsolete trait IDs.** The catalog migrated many EFO trait IDs to MONDO; an obsolete ID
   answers empty. That is `not_found` naming `trait_id`, with a hint to call `resolve_trait`.
-- **Paging.** Upstream rejects `limit` > 250 with a 400. The tools cap `limit` at 50 (25 for
-  performance records, which carry up to three fenced prose fields each against the 128-object
+- **Paging.** Upstream rejects `limit` > 250 with a 400. The tools cap `limit` at 50
+  (a performance row carries one fenced `reported` block, so 50 rows stay under the 128-object
   fence cap) and never forward a larger value.
 - **Honesty.** `total` is the upstream `count`; `truncated` is true whenever rows were
   withheld.

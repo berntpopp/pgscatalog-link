@@ -53,7 +53,12 @@ def _score_search(request: httpx.Request) -> httpx.Response:
 
 def _performance(request: httpx.Request) -> httpx.Response:
     if request.url.params.get("pgs_id") == "PGS000001":
-        return _ok("performance_PGS000001")
+        page = load("performance_PGS000001")
+        pgp = request.url.params.get("pgp_id")
+        if pgp is None:
+            return httpx.Response(200, json=page)
+        rows = [r for r in page["results"] if r["publication"]["id"] == pgp]
+        return httpx.Response(200, json={**page, "count": len(rows), "results": rows})
     return httpx.Response(
         200, json={"size": 0, "count": 0, "next": None, "previous": None, "results": []}
     )

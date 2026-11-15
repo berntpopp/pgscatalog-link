@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import httpx
 import pytest
 import respx
@@ -17,7 +19,7 @@ async def test_resolve_trait_pages_with_exact_total(pgs_service: PgsService) -> 
     assert out["total"] == upstream["count"] and out["returned"] == 3
     assert out["truncated"] is (upstream["count"] > 3) and out["next_offset"] == 3
     assert out["data_version"] == "PGS Catalog release 2026-10-23"
-    assert {"id", "label", "score_count", "descendant_score_count"} <= set(out["traits"][0])
+    assert {"id", "label", "score_count", "score_count_with_descendants"} <= set(out["traits"][0])
 
 
 async def test_resolve_trait_without_hits_is_honest_empty(pgs_service: PgsService) -> None:
@@ -33,7 +35,8 @@ async def test_obsolete_trait_id_is_not_found_naming_the_field(pgs_service: PgsS
 
 async def test_get_trait_children_are_opt_in(pgs_service: PgsService) -> None:
     plain = (await pgs_service.get_trait("MONDO_0004989", False))["trait"]
-    assert "descendant_pgs_ids" not in plain and len(plain["pgs_ids"]) == 145
+    assert "descendant_pgs_ids" not in plain and plain["score_count"] == 145
+    assert len(plain["pgs_ids"]) == 50 and plain["pgs_ids_truncated"] is True
     full = (await pgs_service.get_trait("MONDO_0004989", True))["trait"]
     assert full["descendant_pgs_ids"] and not set(full["descendant_pgs_ids"]) & set(
         plain["pgs_ids"]
@@ -52,7 +55,9 @@ async def test_search_scores_reports_missing_ids(pgs_service: PgsService) -> Non
     out = await pgs_service.search_scores(pgs_ids=["pgs000001", "PGS999999"])
     assert [s["id"] for s in out["scores"]] == ["PGS000001"]
     assert out["missing_pgs_ids"] == ["PGS999999"] and out["returned"] == 1
-    assert out["scores"][0]["license"].startswith("PGS obtained from the Catalog")
+    assert out["total"] == 1  # counts existing scores, not requested IDs
+    assert out["license_default"].startswith("PGS obtained from the Catalog")
+    assert "license" not in out["scores"][0]  # standard terms are stated once
 
 
 async def test_search_scores_all_unknown_ids_is_not_found(pgs_service: PgsService) -> None:
@@ -63,21 +68,44 @@ async def test_search_scores_all_unknown_ids_is_not_found(pgs_service: PgsServic
 @pytest.mark.parametrize(
     "kwargs",
     [
-        {"trait_id": "MONDO_0004989", "pmid": 1},
         {"pmid": 25855707, "include_children": True},
         {"include_children": True},
+        {"publication_id": "PGP000001", "pmid": 25855707},
     ],
 )
-async def test_search_scores_takes_at_most_one_selector(
+async def test_search_scores_rejects_meaningless_selector_mixes(
     pgs_service: PgsService, kwargs: dict[str, object]
 ) -> None:
     with pytest.raises(InvalidInputError):
         await pgs_service.search_scores(**kwargs)  # type: ignore[arg-type]
 
 
+async def test_search_scores_selectors_combine_with_and(pgs_service: PgsService) -> None:
+    trait = set(load("trait_MONDO_0004989")["associated_pgs_ids"])
+    out = await pgs_service.search_scores(trait_id="MONDO_0004989", pmid=25855707)
+    expected = sorted(trait & {"PGS000001", "PGS000002", "PGS000003"})
+    assert out["selector"] == {
+        "trait_id": "MONDO_0004989",
+        "include_children": False,
+        "publication_id": "PGP000001",
+        "pmid": 25855707,
+        "matches_per_selector": [len(trait), 3],
+    }
+    assert out["total"] == len(expected) and [s["id"] for s in out["scores"]] == expected
+    with pytest.raises(NotFoundError):  # each selector is still validated
+        await pgs_service.search_scores(trait_id="MONDO_0004989", pmid=1)
+    mixed = await pgs_service.search_scores(
+        trait_id="MONDO_0004989", pgs_ids=["PGS000001", "PGS999999"]
+    )
+    assert [s["id"] for s in mixed["scores"]] == ["PGS000001"]
+    assert mixed["missing_pgs_ids"] == ["PGS999999"]  # never silently dropped
+    with pytest.raises(NotFoundError):
+        await pgs_service.search_scores(trait_id="MONDO_0004989", pgs_ids=["PGS999999"])
+
+
 async def test_search_scores_by_publication_unions_dev_and_eval(pgs_service: PgsService) -> None:
     out = await pgs_service.search_scores(pmid=25855707)
-    assert out["selector"] == {"publication_id": "PGP000001"}
+    assert out["selector"] == {"publication_id": "PGP000001", "pmid": 25855707}
     assert out["total"] == 3
 
 
@@ -104,12 +132,29 @@ async def test_bad_identifier_never_reaches_upstream(
 
 
 async def test_performance_rows_and_unknown_score(pgs_service: PgsService) -> None:
-    out = await pgs_service.get_score_performance("PGS000001", 2, 0)
+    out = await pgs_service.get_score_performance("PGS000001", 2, 0, response_mode="full")
     assert out["total"] == load("performance_PGS000001")["count"]
     row = out["performance"][0]
     assert row["effect_sizes"][0]["name_short"] == "OR" and row["sampleset"]["samples"]
     with pytest.raises(NotFoundError):
         await pgs_service.get_score_performance("PGS999999", 2, 0)
+
+
+async def test_performance_filtered_by_publication(pgs_service: PgsService) -> None:
+    rows = load("performance_PGS000001")["results"]
+    own = [r["id"] for r in rows if r["publication"]["id"] == "PGP000001"]
+    out = await pgs_service.get_score_performance("PGS000001", 25, 0, "pgp000001")
+    assert out["publication_id"] == "PGP000001" and out["total"] == len(own) > 0
+    assert [r["id"] for r in out["performance"]] == own
+    with pytest.raises(NotFoundError) as err:  # an unknown filter is never a silent empty list
+        await pgs_service.get_score_performance("PGS000001", 25, 0, "PGP999999")
+    assert err.value.extra["field"] == "publication_id"
+
+
+async def test_ontology_id_without_hit_explains_retired_ids(pgs_service: PgsService) -> None:
+    out = await pgs_service.resolve_trait("EFO_0000305", 3, 0)
+    assert out["total"] == 0 and "retired" in out["hint"]
+    assert "broader" in (await pgs_service.resolve_trait("zzqqxx", 3, 0))["hint"]
 
 
 async def test_publication_lookup_both_ways(pgs_service: PgsService) -> None:
@@ -137,3 +182,68 @@ async def test_search_scores_without_selector_pages_the_catalog(pgs_service: Pgs
     out = await pgs_service.search_scores(limit=2)
     assert out["selector"] == {"all": True} and out["total"] == load("score_all")["count"]
     assert [s["id"] for s in out["scores"]] == ["PGS000001", "PGS000002"]
+
+
+def test_only_the_standard_license_is_factored_out() -> None:
+    from pgscatalog_link.shaping import STANDARD_LICENSE, factor_license
+
+    rows = [{"license": "a"}, {"license": "a"}]
+    assert factor_license(rows) is None and rows == [{"license": "a"}, {"license": "a"}]
+    rows = [{"license": STANDARD_LICENSE}, {"license": "CC BY 4.0"}]
+    assert factor_license(rows) == STANDARD_LICENSE and rows == [{}, {"license": "CC BY 4.0"}]
+
+
+async def test_performance_response_modes_are_projections(pgs_service: PgsService) -> None:
+    def call(mode: str) -> Any:
+        return pgs_service.get_score_performance("PGS000001", 50, 0, response_mode=mode)
+
+    full, compact, minimal = await call("full"), await call("compact"), await call("minimal")
+    assert full["total"] == compact["total"] == minimal["total"]  # B3: never destroy
+    assert [r["id"] for r in full["performance"]] == [r["id"] for r in minimal["performance"]]
+    row, wide = compact["performance"][0], full["performance"][0]
+    assert wide["reported"]["kind"] == "untrusted_text" and "reported" not in row
+    assert all("name_long" not in m for m in row["classification_metrics"])
+    samples = compact["samplesets"][row["sampleset"]]
+    assert samples and all("ancestry_country" not in s for s in samples)
+    assert "publication" not in minimal["performance"][0] and "samplesets" not in minimal
+    with pytest.raises(InvalidInputError):
+        await pgs_service.get_score_performance("PGS000001", 51, 0)
+
+
+async def test_score_lists_cohorts_once(pgs_service: PgsService) -> None:
+    score = (await pgs_service.get_score("PGS000001"))["score"]
+    assert all("cohorts" not in s for s in score["samples_variants"])
+    assert score["cohort_count"] == len(score["cohorts"])
+
+
+def test_authors_are_capped_with_a_count() -> None:
+    from pgscatalog_link.shaping import publication_detail
+
+    out = publication_detail(
+        {"id": "PGP000001", "authors": ", ".join(f"A{i} X" for i in range(30))}
+    )
+    assert out["author_count"] == 30 and out["authors"].endswith("A9 X, et al.")
+
+
+def test_trait_match_kind() -> None:
+    from pgscatalog_link.shaping import match_kind
+
+    raw = {"id": "MONDO_0004989", "label": "breast carcinoma", "trait_synonyms": ["breast cancer"]}
+    assert [match_kind(raw, q) for q in ("Breast Carcinoma", "breast cancer", "breast")] == [
+        "label",
+        "synonym",
+        "partial",
+    ]
+
+
+async def test_score_response_modes_are_projections(pgs_service: PgsService) -> None:
+    def call(mode: str) -> Any:
+        return pgs_service.search_scores(trait_id="MONDO_0004989", limit=2, response_mode=mode)
+
+    minimal, compact, full = await call("minimal"), await call("compact"), await call("full")
+    assert minimal["total"] == compact["total"] == full["total"] == 145
+    assert set(minimal["scores"][0]) == {"id", "name"}
+    assert "traits" not in compact["scores"][0] and "traits" in full["scores"][0]
+    assert compact["scores"][0]["ancestry_distribution"] == {
+        k: v["dist"] for k, v in full["scores"][0]["ancestry_distribution"].items()
+    }
