@@ -1,0 +1,186 @@
+"""Pure shapers: turn native PGS Catalog records into compact, honest payload rows.
+
+Identifiers, numbers and controlled vocabularies pass through verbatim. Free-text prose
+written by submitters (titles, trait descriptions, phenotyping, covariates, comments) is
+fenced as ``untrusted_text``. The per-score ``license`` is passed through verbatim: it is
+the author-set reuse term and must never be paraphrased.
+"""
+
+from __future__ import annotations
+
+import re
+from typing import Any
+
+from pgscatalog_link.mcp.untrusted_content import fence_untrusted_text
+
+SITE = "https://www.pgscatalog.org"
+PGS_ID = re.compile(r"^PGS\d{6}$")
+PGP_ID = re.compile(r"^PGP\d{6}$")
+#: Ontology CURIE as the catalog writes it (EFO_0001645, MONDO_0004989, HP_0000822, ...).
+TRAIT_ID = re.compile(r"^[A-Za-z][A-Za-z0-9]{0,15}_[A-Za-z0-9]{1,20}$")
+
+
+def fence(raw: Any, record_id: str) -> dict[str, Any] | None:
+    """Fence one upstream prose value (``None``/empty stays ``None``)."""
+    if not isinstance(raw, str) or not raw.strip():
+        return None
+    return fence_untrusted_text(raw, source="pgscatalog", record_id=record_id).model_dump(
+        mode="json"
+    )
+
+
+def page_block(*, total: int, returned: int, limit: int, offset: int) -> dict[str, Any]:
+    """Uniform pagination block; ``total`` is the exact upstream/derived count."""
+    truncated = offset + returned < total
+    return {
+        "total": total,
+        "returned": returned,
+        "limit": limit,
+        "offset": offset,
+        "truncated": truncated,
+        "next_offset": offset + returned if truncated else None,
+    }
+
+
+def publication_ref(pub: dict[str, Any] | None) -> dict[str, Any] | None:
+    """Citation-sized reference to a PGP publication (no prose)."""
+    if not pub:
+        return None
+    return {
+        "id": pub.get("id"),
+        "pmid": pub.get("PMID"),
+        "doi": pub.get("doi"),
+        "first_author": pub.get("firstauthor"),
+        "journal": pub.get("journal"),
+        "date_publication": pub.get("date_publication"),
+    }
+
+
+def _sample(sample: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "sample_number": sample.get("sample_number"),
+        "cases": sample.get("sample_cases"),
+        "controls": sample.get("sample_controls"),
+        "ancestry_broad": sample.get("ancestry_broad"),
+        "ancestry_country": sample.get("ancestry_country"),
+        "source_gwas_catalog": sample.get("source_GWAS_catalog"),
+        "cohorts": [c.get("name_short") for c in sample.get("cohorts") or []],
+    }
+
+
+def trait_summary(raw: dict[str, Any]) -> dict[str, Any]:
+    """A trait row for resolve_trait: identity, categories and score counts."""
+    direct = raw.get("associated_pgs_ids") or []
+    child = raw.get("child_associated_pgs_ids") or []
+    return {
+        "id": raw.get("id"),
+        "label": raw.get("label"),
+        "ontology_url": raw.get("url"),
+        "categories": raw.get("trait_categories") or [],
+        "synonyms": (raw.get("trait_synonyms") or [])[:10],
+        "score_count": len(direct),
+        "descendant_score_count": len(set(child) - set(direct)),
+        "url": f"{SITE}/trait/{raw.get('id')}/",
+    }
+
+
+def trait_detail(raw: dict[str, Any], *, include_children: bool) -> dict[str, Any]:
+    """Full trait record; descendant scores only when asked for."""
+    trait_id = str(raw.get("id"))
+    out = trait_summary(raw)
+    out["synonyms"] = raw.get("trait_synonyms") or []
+    out["mapped_terms"] = raw.get("trait_mapped_terms") or []
+    out["description"] = fence(raw.get("description"), trait_id)
+    out["pgs_ids"] = raw.get("associated_pgs_ids") or []
+    if include_children:
+        direct = set(out["pgs_ids"])
+        out["descendant_pgs_ids"] = sorted(set(raw.get("child_associated_pgs_ids") or []) - direct)
+        out["child_traits"] = [
+            {"id": c.get("id"), "label": c.get("label")} for c in raw.get("child_traits") or []
+        ]
+    return out
+
+
+def score_summary(raw: dict[str, Any]) -> dict[str, Any]:
+    """A score row for search_scores: what it predicts, how it was built, who may use it."""
+    return {
+        "id": raw.get("id"),
+        "name": raw.get("name"),
+        "trait_reported": raw.get("trait_reported"),
+        "traits": [
+            {"id": t.get("id"), "label": t.get("label")} for t in raw.get("trait_efo") or []
+        ],
+        "method_name": raw.get("method_name"),
+        "variants_number": raw.get("variants_number"),
+        "variants_genomebuild": raw.get("variants_genomebuild"),
+        "weight_type": raw.get("weight_type"),
+        "ancestry_distribution": raw.get("ancestry_distribution") or {},
+        "publication": publication_ref(raw.get("publication")),
+        "date_release": raw.get("date_release"),
+        "license": raw.get("license"),
+        "url": f"{SITE}/score/{raw.get('id')}/",
+    }
+
+
+def score_detail(raw: dict[str, Any]) -> dict[str, Any]:
+    """Full score metadata; the weights themselves stay in the linked scoring files."""
+    score_id = str(raw.get("id"))
+    out = score_summary(raw)
+    harmonized = raw.get("ftp_harmonized_scoring_files") or {}
+    out.update(
+        {
+            "trait_additional": fence(raw.get("trait_additional"), score_id),
+            "method_params": fence(raw.get("method_params"), score_id),
+            "variants_interactions": raw.get("variants_interactions"),
+            "matches_publication": raw.get("matches_publication"),
+            "samples_variants": [_sample(s) for s in raw.get("samples_variants") or []],
+            "samples_training": [_sample(s) for s in raw.get("samples_training") or []],
+            "scoring_files": {
+                "original": raw.get("ftp_scoring_file"),
+                "harmonized": {
+                    build: (files or {}).get("positions") for build, files in harmonized.items()
+                },
+            },
+        }
+    )
+    return out
+
+
+def performance_row(raw: dict[str, Any]) -> dict[str, Any]:
+    """One PPM performance record with its evaluation sample set."""
+    ppm_id = str(raw.get("id"))
+    sampleset = raw.get("sampleset") or {}
+    metrics = raw.get("performance_metrics") or {}
+    return {
+        "id": ppm_id,
+        "pgs_id": raw.get("associated_pgs_id"),
+        "phenotyping_reported": fence(raw.get("phenotyping_reported"), ppm_id),
+        "publication": publication_ref(raw.get("publication")),
+        "sampleset": {
+            "id": sampleset.get("id"),
+            "samples": [_sample(s) for s in sampleset.get("samples") or []],
+        },
+        "effect_sizes": metrics.get("effect_sizes") or [],
+        "classification_metrics": metrics.get("class_acc") or [],
+        "other_metrics": metrics.get("othermetrics") or [],
+        "covariates": fence(raw.get("covariates"), ppm_id),
+        "comments": fence(raw.get("performance_comments"), ppm_id),
+    }
+
+
+def publication_detail(raw: dict[str, Any]) -> dict[str, Any]:
+    """A PGP publication with the scores it developed and evaluated."""
+    pub_id = str(raw.get("id"))
+    associated = raw.get("associated_pgs_ids") or {}
+    out = publication_ref(raw) or {}
+    out.update(
+        {
+            "title": fence(raw.get("title"), pub_id),
+            "authors": raw.get("authors"),
+            "date_release": raw.get("date_release"),
+            "developed_pgs_ids": associated.get("development") or [],
+            "evaluated_pgs_ids": associated.get("evaluation") or [],
+            "url": f"{SITE}/publication/{pub_id}/",
+        }
+    )
+    return out

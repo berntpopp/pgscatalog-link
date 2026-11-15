@@ -1,0 +1,343 @@
+{
+ "size": 2,
+ "count": 21,
+ "next": "https://www.pgscatalog.org/rest/performance/search?limit=2&offset=2&pgs_id=PGS000001",
+ "previous": null,
+ "results": [
+  {
+   "id": "PPM000001",
+   "associated_pgs_id": "PGS000001",
+   "phenotyping_reported": "All breast cancer",
+   "publication": {
+    "id": "PGP000001",
+    "title": "Prediction of breast cancer risk based on profiling with common genetic variants.",
+    "doi": "10.1093/jnci/djv036",
+    "PMID": 25855707,
+    "journal": "J Natl Cancer Inst",
+    "firstauthor": "Mavaddat N",
+    "date_publication": "2015-04-08"
+   },
+   "sampleset": {
+    "id": "PSS000001",
+    "samples": [
+     {
+      "sample_number": 67054,
+      "sample_cases": 33673,
+      "sample_controls": 33381,
+      "sample_percent_male": null,
+      "sample_age": null,
+      "phenotyping_free": "All breast cancer",
+      "followup_time": null,
+      "ancestry_broad": "European",
+      "ancestry_free": null,
+      "ancestry_country": "Australia, Belarus, Belgium, Canada, Denmark, Finland, France, Germany, Greece, Ireland, Netherlands, Norway, Poland, Sweden, UK, USA",
+      "ancestry_additional": null,
+      "source_GWAS_catalog": null,
+      "source_PMID": null,
+      "source_DOI": null,
+      "cohorts": [
+       {
+        "name_short": "ABCFS",
+        "name_full": "Australian Breast Cancer Family Study",
+        "name_others": null
+       },
+       {
+        "name_short": "MCCS",
+        "name_full": "Melbourne Collaborative Cohort Study",
+        "name_others": null
+       },
+       {
+        "name_short": "HMBCS",
+        "name_full": "Hannover-Minsk Breast Cancer Study",
+        "name_others": null
+       },
+       {
+        "name_short": "LMBC",
+        "name_full": "Leuven Multidisciplinary Breast Centre",
+        "name_others": null
+       },
+       {
+        "name_short": "MTLGEBCS",
+        "name_full": "Montreal Gene-Environment Breast Cancer Study",
+        "name_others": null
+       },
+       {
+        "name_short": "CGPS",
+        "name_full": "Copenhagen General Population Study",
+        "name_others": null
+       },
+       {
+        "name_short": "KBCP",
+        "name_full": "Kuopio Breast Cancer Project",
+        "name_others": null
+       },
+       {
+        "name_short": "OBCS",
+        "name_full": "Oulu Breast Cancer Study",
+        "name_others": null
+       },
+       {
+        "name_short": "CECILE",
+        "name_full": "CECILE Breast Cancer Study",
+        "name_others": null
+       },
+       {
+        "name_short": "BBCC",
+        "name_full": "Bavarian Breast Cancer Cases and Controls",
+        "name_others": null
+       },
+       {
+        "name_short": "BSUCH",
+        "name_full": "Breast Cancer Study of the University Clinic Heidelberg",
+        "name_others": null
+       },
+       {
+        "name_short": "ESTHER",
+        "name_full": "Epidemiological investigations on chances of preventing, recognizing early and optimally treating chronic diseases in an elderly population / Epidemiologische Studie zu Chancen der Verh\u00fctung, Fr\u00fcherkennung und optimierten Therapie chronischer Erkrankungen in der \u00e4lteren Bev\u00f6lkerung, Verlauf der diagnotischen Abkl\u00e4rung bei Krebspatienten",
+        "name_others": "Epidemiological investigations of the chances of preventing, recognizing early and optimally treating chronic diseases in an elderly population (ESTHER_ELDERLY), Epidemiologische Studie zu Chancen der Verh\u00fctung, Fr\u00fcherkennung und optimierten Therapie chronischer Erkrankungen in der \u00e4lteren Bev\u00f6lkerung, Verlauf der diagnotischen Abkl\u00e4rung bei Krebspatienten (ESTHER-VERDI)"
+       },
+       {
+        "name_short": "GENICA",
+        "name_full": "Gene Environment Interaction and Breast Cancer in Germany",
+        "name_others": null
+       },
+       {
+        "name_short": "MARIE",
+        "name_full": "Mammary Carcinoma Risk Factor Investigation",
+        "name_others": null
+       },
+       {
+        "name_short": "SKKDKFZS",
+        "name_full": "St_dtisches Klinikum Karlsruhe Deutsches Krebsforschungszentrum Study",
+        "name_others": null
+       },
+       {
+        "name_short": "DEMOKRITOS",
+        "name_full": "Hellenic Cooperative Oncology Group",
+        "name_others": null
+       },
+       {
+        "name_short": "BIGGS",
+        "name_full": "Breast Cancer In Galway Genetic Study",
+        "name_others": null
+       },
+       {
+        "name_short": "ABCS",
+        "name_full": "Amsterdam Breast Cancer Study",
+        "name_others": null
+       },
+       {
+        "name_short": "ORIGO",
+        "name_full": "Leiden University Medical Centre Breast Cancer Study",
+        "name_others": null
+       },
+       {
+        "name_short": "NorBCS",
+        "name_full": "Norwegian Breast Cancer Study",
+        "name_others": null
+       },
+       {
+        "name_short": "SZBCS",
+        "name_full": "IHCC-Szczecin Breast Cancer Study",
+        "name_others": null
+       },
+       {
+        "name_short": "PBCS",
+        "name_full": "Polish Breast Cancer Study",
+        "name_others": null
+       },
+       {
+        "name_short": "pKARMA",
+        "name_full": "Karolinska Mammography Project for Risk Prediction of Breast Cancer",
+        "name_others": null
+       },
+       {
+        "name_short": "SASBAC",
+        "name_full": "Singapore and Sweden Breast Cancer Study",
+        "name_others": null
+       },
+       {
+        "name_short": "SBCS",
+        "name_full": "Shanghai Breast Cancer Study",
+        "name_others": null
+       },
+       {
+        "name_short": "SEARCH",
+        "name_full": "Study of Epidemiology and Risk Factors in Cancer Heredity",
+        "name_others": null
+       },
+       {
+        "name_short": "MCBCS",
+        "name_full": "Mayo Clinic Breast Cancer Study",
+        "name_others": null
+       },
+       {
+        "name_short": "UKBGS",
+        "name_full": "UK Breakthrough Generations Study",
+        "name_others": null
+       },
+       {
+        "name_short": "NBHS",
+        "name_full": "Nashville Breast Health Study",
+        "name_others": null
+       },
+       {
+        "name_short": "CTS",
+        "name_full": "California Teachers Study",
+        "name_others": null
+       },
+       {
+        "name_short": "MEC",
+        "name_full": "Multiethnic Cohort Study of Diet and Health",
+        "name_others": null
+       },
+       {
+        "name_short": "RPCI",
+        "name_full": "Roswell Park Cancer Institute",
+        "name_others": null
+       },
+       {
+        "name_short": "OSU",
+        "name_full": "The Stefanie Spielman Breast Bank and the Columbus Area Control Sample Bank",
+        "name_others": null
+       }
+      ],
+      "cohorts_additional": "iCOGS"
+     }
+    ]
+   },
+   "performance_metrics": {
+    "effect_sizes": [
+     {
+      "name_long": "Odds Ratio",
+      "name_short": "OR",
+      "estimate": 1.55,
+      "ci_lower": 1.52,
+      "ci_upper": 1.58
+     }
+    ],
+    "class_acc": [
+     {
+      "name_long": "Concordance Statistic",
+      "name_short": "C-index",
+      "estimate": 0.622,
+      "ci_lower": 0.619,
+      "ci_upper": 0.627
+     }
+    ],
+    "othermetrics": []
+   },
+   "covariates": null,
+   "performance_comments": null
+  },
+  {
+   "id": "PPM000011",
+   "associated_pgs_id": "PGS000001",
+   "phenotyping_reported": "Invasive breast cancer",
+   "publication": {
+    "id": "PGP000002",
+    "title": "Polygenic Risk Scores for Prediction of Breast Cancer and Breast Cancer Subtypes.",
+    "doi": "10.1016/j.ajhg.2018.11.002",
+    "PMID": 30554720,
+    "journal": "Am J Hum Genet",
+    "firstauthor": "Mavaddat N",
+    "date_publication": "2018-12-13"
+   },
+   "sampleset": {
+    "id": "PSS000004",
+    "samples": [
+     {
+      "sample_number": 29751,
+      "sample_cases": 11428,
+      "sample_controls": 18323,
+      "sample_percent_male": 0.0,
+      "sample_age": null,
+      "phenotyping_free": "Invasive breast cancer-affected",
+      "followup_time": null,
+      "ancestry_broad": "European",
+      "ancestry_free": null,
+      "ancestry_country": "Denmark, France, Germany, Greece, Italy, Norway, Spain, Sweden, The Netherlands, UK, USA",
+      "ancestry_additional": null,
+      "source_GWAS_catalog": null,
+      "source_PMID": null,
+      "source_DOI": null,
+      "cohorts": [
+       {
+        "name_short": "AHS",
+        "name_full": "Agricultural Health Study",
+        "name_others": null
+       },
+       {
+        "name_short": "BGS",
+        "name_full": "Breakthrough Generations Study",
+        "name_others": null
+       },
+       {
+        "name_short": "EPIC",
+        "name_full": "European Prospective Investigation into Cancer",
+        "name_others": null
+       },
+       {
+        "name_short": "FHRISK",
+        "name_full": "Family History Clinic in Manchester",
+        "name_others": null
+       },
+       {
+        "name_short": "NHS",
+        "name_full": "Nurses Health Study",
+        "name_others": null
+       },
+       {
+        "name_short": "NHS2",
+        "name_full": "Nurses Health Study II",
+        "name_others": null
+       },
+       {
+        "name_short": "PLCO",
+        "name_full": "Prostate, Lung, Colorectal, and Ovarian Cancer Screening Trial",
+        "name_others": null
+       },
+       {
+        "name_short": "PROCAS",
+        "name_full": "Breast Screening Programme (NHSBSP) in Greater Manchester",
+        "name_others": null
+       },
+       {
+        "name_short": "KARMA",
+        "name_full": "Karolinska Mammography Project for Risk Prediction of Breast Cancer \u2013 Cohort Study",
+        "name_others": null
+       },
+       {
+        "name_short": "SISTER",
+        "name_full": "The Sister Study",
+        "name_others": null
+       }
+      ],
+      "cohorts_additional": "Prospective Test Set"
+     }
+    ]
+   },
+   "performance_metrics": {
+    "effect_sizes": [
+     {
+      "name_long": "Odds Ratio",
+      "name_short": "OR",
+      "estimate": 1.46,
+      "ci_lower": 1.42,
+      "ci_upper": 1.49
+     }
+    ],
+    "class_acc": [
+     {
+      "name_long": "Area Under the Receiver-Operating Characteristic Curve",
+      "name_short": "AUROC",
+      "estimate": 0.603
+     }
+    ],
+    "othermetrics": []
+   },
+   "covariates": "study, genetic PCs 1-15",
+   "performance_comments": null
+  }
+ ]
+}

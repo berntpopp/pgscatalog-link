@@ -1,0 +1,13 @@
+pgscatalog-link
+Copyright (c) pgscatalog-link contributors. Code licensed under the MIT licence (see LICENSE).
+
+Data
+----
+pgscatalog-link redistributes no data. It queries the PGS Catalog REST API
+(https://www.pgscatalog.org/rest/, EMBL-EBI / NHGRI-EBI) live. PGS Catalog data are subject
+to the EMBL-EBI Terms of Use (https://www.ebi.ac.uk/about/terms-of-use/). Each polygenic
+score carries its own author-set licence (some CC BY-NC-ND), passed through verbatim in the
+`license` field; scoring files are linked, never copied.
+
+Cite: Lambert SA et al. Enhancing the Polygenic Score Catalog with tools for score
+calculation and ancestry normalization. Nat Genet 2024. doi:10.1038/s41588-024-01937-x
