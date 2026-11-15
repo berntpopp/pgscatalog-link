@@ -1,6 +1,6 @@
 # Agent UX evaluation results (2026-11-15)
 
-> Historical record — five rounds run against v0.1.0 and the changes that became v0.2.0; the live contract is `get_server_capabilities` and the README.
+> Historical record — six rounds: five against v0.1.0 and its changes, one against the released v0.2.0; the live contract is `get_server_capabilities` and the README.
 
 Method: [`agent-ux-protocol.md`](agent-ux-protocol.md). Agents: Claude Code 2.1.325
 (`claude-opus-5-5`), Codex CLI 0.164.0 (its configured default model), Antigravity `agy` 1.5.9
@@ -17,6 +17,7 @@ are not committed.
 | 3 (+C) | 88 | 83 | 88 | 84 | 70 | 70 | 68 | 92 | 83 |
 | 4 | 88 | 87 | 85 | 82 | 84 | 78 | 72 | 90 | 85 |
 | 5 | 85 | 85 | 85 | 85 | 85 | 72 | 76 | 90 | 86 |
+| 6 (v0.2.0, 8/9 sessions) | 88 | 85 | 85 | 82 | 87 | 62 | 80 | 90 | 86 |
 
 Rows 1 and 2 are as scored at the time. Later rescoring leaves out untested `error_recovery`
 ratings: it raises round 1's error minimum to 72 and round 2's to 86, and changes nothing else.
@@ -25,15 +26,22 @@ In round 5, Codex and agy rate every category at 85 or above except token effici
 Most of the round-5 minimums come from Claude. Its B session rated everything exactly 85, and
 its speed ratings (72, 78) cite the slow upstream performance endpoint.
 
-**Gate not reached (> 85 everywhere).** The open categories are:
+Round 6 ran the released v0.2.0 (with `response_mode`). The ninth session, agy on C, was
+stopped unfinished at the user's request. Token-efficiency ratings rose: agy 90-94, Codex
+80-85, Claude 80-85. Error recovery cleared the gate (minimum 87).
+
+**Gate not reached (> 85 everywhere).** Schema clarity and correctness sit at 85, both
+from Claude's flat B ratings. Completeness is 82, from Claude B, for the retired-ID crosswalk
+the catalog doesn't provide. Speed is 62: Claude C saw a 14.5 s cold 30-row performance page.
+In detail:
 
 - **Speed: upstream-bound.** Warm calls take 2-4 ms and our client's round trip is 0.3-0.6 s.
   But the catalog's `/performance/search` itself takes 6-12 s for scores with many records:
   PGS000006 took 12 s at `limit=10`, measured directly with curl. Cache hits make repeats
   instant. Nothing on our side can make the first call faster.
-- **Token efficiency: improved after round 5, not re-measured by agents.** The fleet
-  `response_mode` (default `compact`) landed after round 5. It replaced the round-4 `compact`
-  booleans, which were not the fleet standard. Payload sizes:
+- **Token efficiency: minimum 80 in round 6** (from 55 in round 1). The fleet `response_mode`
+  (default `compact`) replaced the round-4 `compact` booleans, which were not the fleet
+  standard. Payload sizes:
 
 | Call | Round 1 | v0.2.0 default |
 |------|--------:|---------------:|
@@ -52,6 +60,8 @@ was caused by the server in any round.
   EBI OLS maps that ID, so both readings are defensible, and `resolve_trait` now flags the two
   exact matches.
 - Round 5: 9 of 9 sessions correct.
+- Round 6: 8 of 8 correct. Claude B again took MONDO_0007254 for the retired ID, as in
+  round 3.
 
 ## What changed because of the agents (v0.2.0)
 
