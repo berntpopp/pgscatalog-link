@@ -39,7 +39,7 @@ from fastmcp import Client
 from fastmcp.exceptions import ResourceError
 from mcp.shared.memory import create_client_server_memory_streams
 from mcp.shared.message import SessionMessage
-from mcp.types import INVALID_PARAMS, JSONRPCMessage, JSONRPCRequest
+from mcp.types import INVALID_PARAMS, JSONRPCRequest
 
 from pgscatalog_link.mcp._sanitize import FORBIDDEN_CODEPOINTS
 from pgscatalog_link.mcp.facade import create_pgs_mcp
@@ -266,24 +266,37 @@ async def _raw_read_resource_error(
                         server_read,
                         server_write,
                         init_options,
-                        stateless=True,  # start Initialized: skip the handshake
                         raise_exceptions=False,
                     )
 
                 task_group.start_soon(_run)
+                # SDK 2 dropped ``stateless=``: complete the legacy handshake first.
+                init = JSONRPCRequest(
+                    jsonrpc="2.0",
+                    id=0,
+                    method="initialize",
+                    params={
+                        "protocolVersion": "2025-06-18",
+                        "capabilities": {},
+                        "clientInfo": {"name": "probe", "version": "0"},
+                    },
+                )
+                await client_write.send(SessionMessage(message=init))
+                with anyio.fail_after(5):
+                    await client_read.receive()
                 request = JSONRPCRequest(
                     jsonrpc="2.0",
                     id=1,
                     method="resources/read",
                     params={"uri": uri},
                 )
-                await client_write.send(SessionMessage(message=JSONRPCMessage(request)))
+                await client_write.send(SessionMessage(message=request))
                 with anyio.fail_after(5):
                     for _ in range(8):
                         message = await client_read.receive()
                         if isinstance(message, Exception):
                             raise message
-                        candidate = message.message.root
+                        candidate = message.message  # SDK 2: plain union
                         if isinstance(candidate, mcp_types.JSONRPCError):
                             root = candidate
                             break
@@ -310,6 +323,7 @@ async def test_codepoint_uri_real_request_frame_and_logs_are_clean() -> None:
     root, logs = await _raw_read_resource_error(HOSTILE_UNKNOWN_URI_CP)
     # Caller frame is fixed by mcp core; the residual is the ROOT-logger record.
     if root is not None:
+        assert root.error.code == INVALID_PARAMS
         _assert_clean_text(root.error.message, where="jsonrpc-error")
         if isinstance(root.error.data, str):
             _assert_clean_text(root.error.data, where="jsonrpc-error-data")

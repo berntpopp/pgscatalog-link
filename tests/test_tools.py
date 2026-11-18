@@ -19,14 +19,14 @@ async def test_registered_tools_match_capabilities_and_are_documented(facade: An
         tools = await client.list_tools()
     assert [t.name for t in tools] == TOOLS
     for tool in tools:
-        props = tool.inputSchema.get("properties", {})
+        props = tool.input_schema.get("properties", {})
         for name, prop in props.items():
             assert prop.get("description"), f"{tool.name}.{name} lacks a description"
-        for name in tool.inputSchema.get("required", []):
+        for name in tool.input_schema.get("required", []):
             assert props[name].get("examples"), f"{tool.name}.{name} lacks examples"
         assert tool.description and "Signature:" in tool.description
-        assert tool.annotations is not None and tool.annotations.readOnlyHint is True
-        assert tool.outputSchema is None
+        assert tool.annotations is not None and tool.annotations.read_only_hint is True
+        assert tool.output_schema is None
 
 
 async def test_resolve_trait_envelope_and_next_steps(facade: Any, call_tool: Any) -> None:

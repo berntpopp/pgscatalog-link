@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-18
+
+### Changed
+
+- Upgrade FastMCP 3.4 → 4.2.2 and MCP SDK 1.x → 2.x; supports the 2026-07-28 sessionless
+  protocol era alongside the legacy handshake.
+- Not-found guard Layer 3 (protocol backstop) ported to the SDK 2 request-handler API; a
+  wrapped `resources/read` / `prompts/get` failure keeps JSON-RPC code `-32602` with its fixed,
+  input-free message.
+- `httpx2` / `httpcore2` loggers (FastMCP 4's HTTP stack) are capped at WARNING like `httpx`.
+
 ## [0.2.0] - 2026-11-15
 
 Driven by five rounds of agent UX evaluation (Claude Code, Codex CLI, Antigravity) with only
