@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "pgscatalog-link"
-version = "0.2.0"
+version = "0.3.0"
 description = "MCP server for the PGS Catalog REST API: polygenic scores, traits, publications and performance metrics (research use only)"
 readme = "README.md"
 license = { text = "MIT" }
@@ -35,8 +35,8 @@ dependencies = [
     "pydantic-settings>=2.15.0,<3.0.0",
     "httpx>=0.28.0,<1.0.0",
     "structlog>=24.4.0,<27.0.0",
-    "mcp[cli]>=1.30.0,<2.0.0",
-    "fastmcp>=3.4.10,<4.0.0",
+    "mcp[cli]>=2.3.0,<3.0.0",
+    "fastmcp>=4.2.2,<5.0.0",
 ]
 
 [dependency-groups]
