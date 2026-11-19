@@ -27,6 +27,7 @@ from surface import (
     MAX_SERVER_TOKENS,
     MAX_TOOL_TOKENS,
     is_array,
+    lead_states_return,
     properties,
     surface_metrics,
     tokens,
@@ -70,3 +71,10 @@ async def test_tool_arguments_meet_canonical_schema_documentation_gate(facade: A
             if is_array(prop) and not prop.get("examples"):
                 failures.append(f"S3 {tool['name']}.{name}")
     assert not failures, failures
+
+
+async def test_every_tool_description_leads_with_what_it_returns(facade: Any) -> None:
+    """Tool-Schema Documentation v1.1 rule D1, opted in strictly here."""
+    async with Client(facade) as client:
+        tools = await client.list_tools()
+    assert not [t.name for t in tools if not lead_states_return(t.description)]

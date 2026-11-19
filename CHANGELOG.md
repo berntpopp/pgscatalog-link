@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-11-19
+
+### Changed
+
+- A `resolve_trait` miss on a name now suggests `mondo_resolve_disease` in
+  `_meta.next_commands` (the fleet's disease front door) and says so in the hint.
+- `resolve_trait` description names the returned key (`id`, the `trait_id` other tools take).
+- Re-vendored `scripts/surface.py` from genefoundry-router v0.13.1 (Tool-Schema Documentation
+  v1.1, rule D1); excluded from ruff like the other vendored files.
+
+### Added
+
+- Guard tests: every description lead states what the tool returns (D1, strict); every
+  `next_commands` target names a real tool and real arguments; the fields descriptions promise
+  are returned.
+
 ## [0.3.1] - 2026-11-18
 
 ### Security
