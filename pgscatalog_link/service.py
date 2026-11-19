@@ -129,7 +129,10 @@ class PgsService:
                 "trait's name instead."
             )
         elif count == 0:
-            payload["hint"] = "No trait matched; try a broader name or a synonym."
+            payload["hint"] = (
+                "No trait matched; try a broader name or a synonym. For a disease, "
+                "mondo_resolve_disease gives its Mondo ID and synonyms to search with."
+            )
         elif len(exact) > 1:
             payload["hint"] = (
                 f"{len(exact)} traits match this name exactly ({', '.join(exact)}); they are "

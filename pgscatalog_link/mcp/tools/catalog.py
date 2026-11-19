@@ -17,7 +17,7 @@ from pgscatalog_link.service import (
     MAX_PERFORMANCE_LIMIT,
     MAX_PGS_IDS,
 )
-from pgscatalog_link.shaping import RESPONSE_MODES
+from pgscatalog_link.shaping import RESPONSE_MODES, TRAIT_ID
 
 if TYPE_CHECKING:
     from fastmcp import FastMCP
@@ -101,9 +101,9 @@ def register_catalog_tools(mcp: FastMCP) -> None:
         tags={"traits"},
         description=(
             "Find PGS Catalog traits by name, synonym or current ontology ID (EFO/MONDO/HP) "
-            "and return each trait_id with its categories, match (label, synonym or partial; "
-            "a hint flags several exact matches), score_count (scores mapped "
-            "directly) and score_count_with_descendants (direct + descendant traits; what "
+            "and return each trait's id (the trait_id other tools take) with its categories, "
+            "match (label, synonym or partial; a hint flags several exact matches), "
+            "score_count (scores mapped directly) and score_count_with_descendants (direct + descendant traits; what "
             "search_scores(include_children=true) returns). Start here: other tools need "
             "the catalog's trait_id. Retired IDs are not mapped: search by name. "
             "Signature: resolve_trait(query, limit=, offset=)."
@@ -125,6 +125,9 @@ def register_catalog_tools(mcp: FastMCP) -> None:
         args = {"query": query, "limit": limit, "offset": offset}
 
         def steps(p: dict[str, Any]) -> list[dict[str, Any]]:
+            if p["total"] == 0 and not TRAIT_ID.fullmatch(p["query"]):
+                # fleet front door for disease names: its labels/synonyms may match here
+                return [cmd("mondo_resolve_disease", query=p["query"])]
             first = [cmd("search_scores", trait_id=t["id"]) for t in p["traits"][:1]]
             return first + _paged(p, "resolve_trait", args)
 

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "pgscatalog-link"
-version = "0.3.1"
+version = "0.3.2"
 description = "MCP server for the PGS Catalog REST API: polygenic scores, traits, publications and performance metrics (research use only)"
 readme = "README.md"
 license = { text = "MIT" }
@@ -68,8 +68,8 @@ include = ["server.py", "mcp_server.py"]
 [tool.ruff]
 line-length = 100
 target-version = "py314"
-# Vendored byte-identical from genefoundry-router docs/conformance/ (never reformatted).
-extend-exclude = ["tests/conformance/behaviour.py"]
+# Vendored byte-identical from genefoundry-router (never reformatted or linted here).
+extend-exclude = ["tests/conformance/behaviour.py", "scripts/surface.py"]
 
 [tool.ruff.lint]
 # `select` (not `extend-select`): ruff 0.16 grows the implicit default rule set
