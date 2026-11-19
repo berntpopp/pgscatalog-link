@@ -22,9 +22,48 @@ async def test_resolve_trait_pages_with_exact_total(pgs_service: PgsService) -> 
     assert {"id", "label", "score_count", "score_count_with_descendants"} <= set(out["traits"][0])
 
 
-async def test_resolve_trait_without_hits_is_honest_empty(pgs_service: PgsService) -> None:
-    out = await pgs_service.resolve_trait("zzqqxx", 3, 0)
-    assert out["total"] == 0 and out["traits"] == [] and out["truncated"] is False
+async def test_resolve_trait_miss_is_not_found_with_next_commands(pgs_service: PgsService) -> None:
+    with pytest.raises(NotFoundError) as err:
+        await pgs_service.resolve_trait("zzqqxx", 3, 0)
+    extra = err.value.extra
+    assert extra["field"] == "query" and extra["candidates"] == [] and "broader" in extra["hint"]
+    assert extra["next_commands"] == [
+        {"tool": "mondo_resolve_disease", "arguments": {"query": "zzqqxx"}}
+    ]
+    assert "zzqqxx" not in err.value.message  # never echo the query into the message
+
+
+async def test_resolve_trait_partial_only_is_not_found_with_weak_candidates(
+    pgs_service: PgsService, mocked_pgs: respx.MockRouter
+) -> None:
+    page = load("trait_search_diabetes")
+    partial = [r for r in page["results"] if r["id"] != "MONDO_0005015"][:2]
+    mocked_pgs.get("/trait/search").mock(
+        return_value=httpx.Response(200, json={**page, "count": 2, "results": partial})
+    )
+    with pytest.raises(NotFoundError) as err:
+        await pgs_service.resolve_trait("diabetes", 3, 0)
+    cands = err.value.extra["candidates"]
+    assert [c["id"] for c in cands] == [r["id"] for r in partial]
+    assert {c["match"] for c in cands} == {"weak"}
+    assert [c["tool"] for c in err.value.extra["next_commands"]] == [
+        "search_scores",
+        "mondo_resolve_disease",
+    ]
+    assert err.value.extra["next_commands"][0]["arguments"] == {"trait_id": partial[0]["id"]}
+
+
+async def test_resolve_trait_truncated_page_without_exact_stays_success(
+    pgs_service: PgsService, mocked_pgs: respx.MockRouter
+) -> None:
+    # an exact match may sit on a later page: a partial-only page is not a miss
+    page = load("trait_search_diabetes")
+    partial = [r for r in page["results"] if r["id"] != "MONDO_0005015"][:2]
+    mocked_pgs.get("/trait/search").mock(
+        return_value=httpx.Response(200, json={**page, "results": partial})
+    )
+    out = await pgs_service.resolve_trait("diabetes", 2, 0)
+    assert out["truncated"] is True and {t["match"] for t in out["traits"]} == {"partial"}
 
 
 async def test_obsolete_trait_id_is_not_found_naming_the_field(pgs_service: PgsService) -> None:
@@ -152,9 +191,10 @@ async def test_performance_filtered_by_publication(pgs_service: PgsService) -> N
 
 
 async def test_ontology_id_without_hit_explains_retired_ids(pgs_service: PgsService) -> None:
-    out = await pgs_service.resolve_trait("EFO_0000305", 3, 0)
-    assert out["total"] == 0 and "retired" in out["hint"]
-    assert "broader" in (await pgs_service.resolve_trait("zzqqxx", 3, 0))["hint"]
+    with pytest.raises(NotFoundError) as err:
+        await pgs_service.resolve_trait("EFO_0000305", 3, 0)
+    assert "retired" in err.value.extra["hint"]
+    assert "next_commands" not in err.value.extra  # an ID is not disease text
 
 
 async def test_publication_lookup_both_ways(pgs_service: PgsService) -> None:
