@@ -13,6 +13,7 @@ from typing import Any
 
 from pgscatalog_link.api.client import PgsClient
 from pgscatalog_link.exceptions import InvalidInputError, NotFoundError, UpstreamSchemaError
+from pgscatalog_link.mcp.next_commands import cmd
 from pgscatalog_link.shaping import (
     PGP_ID,
     PGS_ID,
@@ -122,24 +123,38 @@ class PgsService:
             **page_block(total=count, returned=len(items), limit=limit, offset=offset),
         }
         exact = [t["id"] for t in items if t["match"] != "partial"]
-        if count == 0 and TRAIT_ID.fullmatch(term):
-            payload["hint"] = (
-                "No current catalog trait has this ID. IDs the catalog retired (many EFO "
-                "terms moved to MONDO) are not mapped to their replacement: search by the "
-                "trait's name instead."
-            )
-        elif count == 0:
-            payload["hint"] = (
-                "No trait matched; try a broader name or a synonym. For a disease, "
-                "mondo_resolve_disease gives its Mondo ID and synonyms to search with."
-            )
-        elif len(exact) > 1:
+        if not exact and offset == 0 and not payload["truncated"]:
+            raise self._trait_miss(term, items)
+        if len(exact) > 1:
             payload["hint"] = (
                 f"{len(exact)} traits match this name exactly ({', '.join(exact)}); they are "
                 "different ontology terms (often parent and child): compare their labels and "
                 "score counts, or use get_trait(include_children=true)."
             )
         return await self._stamp(payload)
+
+    @staticmethod
+    def _trait_miss(term: str, items: list[dict[str, Any]]) -> NotFoundError:
+        """No label/synonym match (Envelope §2a): not_found; partial hits are weak candidates."""
+        candidates = [{**t, "match": "weak"} for t in items]
+        steps = [cmd("search_scores", trait_id=t["id"]) for t in candidates[:1]]
+        if TRAIT_ID.fullmatch(term):
+            hint = (
+                "No current catalog trait has this ID. IDs the catalog retired (many EFO "
+                "terms moved to MONDO) are not mapped to their replacement: search by the "
+                "trait's name instead."
+            )
+        else:
+            hint = (
+                "No trait matched by label or synonym; try a broader name or a synonym. For a "
+                "disease, mondo_resolve_disease gives its Mondo ID and synonyms to search with."
+            )
+            # fleet front door for disease names: its labels/synonyms may match here
+            steps.append(cmd("mondo_resolve_disease", query=term))
+        extra: dict[str, Any] = {"field": "query", "hint": hint, "candidates": candidates}
+        if steps:
+            extra["next_commands"] = steps
+        return NotFoundError("No catalog trait matches this query by label or synonym.", **extra)
 
     async def _trait(self, trait_id: str) -> dict[str, Any]:
         tid = _check(trait_id, TRAIT_ID, "trait_id", "MONDO_0004989")

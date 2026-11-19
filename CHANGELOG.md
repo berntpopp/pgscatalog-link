@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.3] - 2026-11-19
+
+- `resolve_trait`: a query with no label or synonym match (and a complete first page) is now an honest `not_found` (`isError`) instead of a success, per Response-Envelope §2a. Partial hits become `candidates` flagged `match: "weak"`; `_meta.next_commands` points to `search_scores` for the top candidate, then `mondo_resolve_disease` for name queries. The query is not echoed in the message.
+
 ## [0.3.2] - 2026-11-19
 
 ### Changed

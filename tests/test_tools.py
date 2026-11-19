@@ -132,11 +132,11 @@ async def test_descriptions_name_only_returned_fields(facade: Any, call_tool: An
     assert {"developed_pgs_ids", "evaluated_pgs_ids", "title"} <= set(pub["publication"])
 
 
-async def test_trait_miss_points_to_the_fleet_disease_front_door(
-    facade: Any, call_tool: Any
-) -> None:
-    out = await call_tool(facade, "resolve_trait", {"query": "brittle cornea syndrome"})
-    assert out["total"] == 0
+async def test_trait_miss_points_to_the_fleet_disease_front_door(facade: Any) -> None:
+    res = await _raw(facade, "resolve_trait", {"query": "brittle cornea syndrome"})
+    assert res.is_error is True
+    out = res.structured_content
+    assert out["error_code"] == "not_found" and out["candidates"] == []
     assert out["_meta"]["next_commands"] == [
         {"tool": "mondo_resolve_disease", "arguments": {"query": "brittle cornea syndrome"}}
     ]
