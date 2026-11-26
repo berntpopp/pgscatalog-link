@@ -97,6 +97,13 @@ async def _run(
             "data_version": release["data_release"] or release["rest_api_version"] or "live",
             "retrieved_at": payload["retrieved_at"],
         }
+        if "truncated" in payload and "total" in payload:  # paged: Response-Envelope v1 section 5
+            payload.setdefault("_meta", {})["pagination"] = {
+                "total_count": payload["total"],
+                "has_more": payload["truncated"],
+                "next_cursor": payload.get("next_cursor"),  # null where paging is by offset
+                **({"next_offset": payload["next_offset"]} if "next_offset" in payload else {}),
+            }
         primary = "results" if isinstance(payload[key], list) else "result"
         return {primary if k == key else k: v for k, v in payload.items()}
 

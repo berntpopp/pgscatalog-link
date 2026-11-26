@@ -71,3 +71,20 @@ async def test_cache_hit_keeps_the_original_fetch_time(
     # the clock moves an hour per reading: an equal stamp can only be the stored fetch time
     assert again["_meta"]["retrieved_at"] == first["_meta"]["retrieved_at"]
     assert first["_meta"]["retrieved_at"].startswith("2027-01-15T")
+
+
+PAGED = {"get_score_performance", "resolve_trait", "search_scores"}
+
+
+@pytest.mark.parametrize(("tool", "arguments"), DATA_CALLS)
+async def test_paged_tools_report_meta_pagination(
+    facade: Any, call_tool: Any, tool: str, arguments: dict[str, Any]
+) -> None:
+    out = await call_tool(facade, tool, arguments)
+    if tool not in PAGED:
+        assert "pagination" not in out["_meta"]
+        return
+    page = out["_meta"]["pagination"]
+    assert page["total_count"] == out["total"] and page["has_more"] == out["truncated"]
+    assert page["next_cursor"] == out.get("next_cursor")
+    assert page.get("next_offset") == out.get("next_offset")
