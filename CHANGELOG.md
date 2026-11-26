@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-26
+
+### Added
+
+- Response-Envelope Standard v1.2: every successful data result carries `_meta.source`,
+  `_meta.data_version` (the PGS Catalog release date, e.g. `2026-10-23`) and
+  `_meta.retrieved_at` (UTC time of the oldest upstream fetch behind the result; a cache hit
+  keeps the time of the fetch that filled its entry).
+- Schema tests: every data tool result is validated against the vendored
+  `envelope-v1.2.schema.json` (genefoundry-envelope v1.2.0, sha256-pinned).
+
+### Changed
+
+- **Breaking:** the primary payload key is now `results` (lists: `resolve_trait`,
+  `search_scores`, `get_score_performance`) or `result` (records: `get_trait`, `get_score`,
+  `get_publication`), per Response-Envelope Standard v1 §1. It was `traits`, `scores`,
+  `performance`, `trait`, `score` and `publication`.
+- Re-vendored `tests/conformance/behaviour.py` from genefoundry-router (v1.2 provenance check).
+
+### Deprecated
+
+- The top-level `data_version` and `retrieved_at` of a data result. Read them from `_meta`;
+  the top-level copies will be removed in the next minor release.
+
 ## [0.3.3] - 2026-11-19
 
 - `resolve_trait`: a query with no label or synonym match (and a complete first page) is now an honest `not_found` (`isError`) instead of a success, per Response-Envelope §2a. Partial hits become `candidates` flagged `match: "weak"`; `_meta.next_commands` points to `search_scores` for the top candidate, then `mondo_resolve_disease` for name queries. The query is not echoed in the message.

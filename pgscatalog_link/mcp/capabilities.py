@@ -75,7 +75,7 @@ def build_capabilities() -> dict[str, Any]:
             "sample_set": "PSS + 6 digits",
             "trait": "ontology CURIE as the catalog writes it (MONDO_0004989, EFO_0001645)",
         },
-        "data_version": "PGS Catalog release date, stamped on every data payload",
+        "data_version": "PGS Catalog release date, in `_meta` of every data result",
         "limits": {
             "default_limit": DEFAULT_LIMIT,
             "max_limit": MAX_LIMIT,

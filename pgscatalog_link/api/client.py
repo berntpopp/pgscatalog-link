@@ -16,6 +16,7 @@ import asyncio
 import json
 import time
 from collections import OrderedDict
+from contextvars import ContextVar
 from typing import Any
 
 import httpx
@@ -38,6 +39,13 @@ from pgscatalog_link.ratelimit import RateLimiter
 
 USER_AGENT = f"pgscatalog-link/{__version__} (+https://github.com/berntpopp/pgscatalog-link)"
 _RETRY_STATUS = {429, 500, 502, 503, 504}
+
+#: Epoch times of the upstream fetches behind the current tool call; a cache hit reports the
+#: fetch that filled its entry (Response-Envelope v1.2 ``retrieved_at``). The MCP plane resets it.
+FETCH_TIMES: ContextVar[list[float] | None] = ContextVar("pgs_fetch_times", default=None)
+
+#: A JSON object with the epoch time it was fetched from the upstream.
+_Fetched = tuple[dict[str, Any], float]
 
 
 def _retry_after(response: httpx.Response | None) -> float | None:
@@ -86,8 +94,8 @@ class PgsClient:
             max_redirects=MAX_REDIRECTS,
             event_hooks={"request": [guard]},
         )
-        self._cache: OrderedDict[str, tuple[float, dict[str, Any]]] = OrderedDict()
-        self._inflight: dict[str, asyncio.Future[dict[str, Any]]] = {}
+        self._cache: OrderedDict[str, tuple[float, _Fetched]] = OrderedDict()
+        self._inflight: dict[str, asyncio.Future[_Fetched]] = {}
         self.upstream_requests = 0
         self.cache_hits = 0
 
@@ -95,7 +103,7 @@ class PgsClient:
         """Close the underlying HTTP connection pool."""
         await self._http.aclose()
 
-    def _cache_get(self, key: str) -> dict[str, Any] | None:
+    def _cache_get(self, key: str) -> _Fetched | None:
         hit = self._cache.get(key)
         if hit is None or hit[0] < time.monotonic():
             self._cache.pop(key, None)
@@ -104,7 +112,7 @@ class PgsClient:
         self.cache_hits += 1
         return hit[1]
 
-    def _cache_put(self, key: str, value: dict[str, Any]) -> None:
+    def _cache_put(self, key: str, value: _Fetched) -> None:
         self._cache[key] = (time.monotonic() + self.settings.cache_ttl_s, value)
         while len(self._cache) > self.settings.cache_maxsize:
             self._cache.popitem(last=False)
@@ -112,22 +120,26 @@ class PgsClient:
     async def get_json(self, path: str, params: dict[str, Any]) -> dict[str, Any]:
         """GET ``path`` with ``params``; return the JSON object or raise a typed error."""
         key = path + "?" + json.dumps(params, sort_keys=True, default=str)
-        cached = self._cache_get(key)
-        if cached is not None:
-            return cached
-        # Single-flight: parallel identical calls share one upstream request (politeness).
-        task = self._inflight.get(key)
-        if task is None:
-            task = self._inflight[key] = asyncio.ensure_future(self._fetch(path, params))
-            task.add_done_callback(lambda done: self._settle(key, done))
-        return await asyncio.shield(task)
+        hit = self._cache_get(key)
+        if hit is None:
+            # Single-flight: parallel identical calls share one upstream request (politeness).
+            task = self._inflight.get(key)
+            if task is None:
+                task = self._inflight[key] = asyncio.ensure_future(self._fetch(path, params))
+                task.add_done_callback(lambda done: self._settle(key, done))
+            hit = await asyncio.shield(task)
+        data, fetched_at = hit
+        times = FETCH_TIMES.get()
+        if times is not None:
+            times.append(fetched_at)
+        return data
 
-    def _settle(self, key: str, task: asyncio.Future[dict[str, Any]]) -> None:
+    def _settle(self, key: str, task: asyncio.Future[_Fetched]) -> None:
         self._inflight.pop(key, None)
         if not task.cancelled() and task.exception() is None:
             self._cache_put(key, task.result())
 
-    async def _fetch(self, path: str, params: dict[str, Any]) -> dict[str, Any]:
+    async def _fetch(self, path: str, params: dict[str, Any]) -> _Fetched:
         attempts = self.settings.max_retries + 1
         response: httpx.Response | None = None
         for attempt in range(attempts):
@@ -175,4 +187,4 @@ class PgsClient:
             raise UpstreamSchemaError(
                 "The PGS Catalog returned a non-object JSON body.", field="response"
             )
-        return data
+        return data, time.time()

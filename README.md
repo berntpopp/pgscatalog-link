@@ -82,7 +82,7 @@ get_score(pgs_id="PGS000001")                  → 77 variants, ancestry, licenc
 ## Data & provenance
 
 **Source.** The official PGS Catalog REST API, `https://www.pgscatalog.org/rest/`. No key.
-Each response states `retrieved_at` and the source.
+Each data result states `source`, `data_version` and `retrieved_at` in `_meta`.
 
 **Rate limit.** The PGS Catalog publishes no hard request limit; it is a shared EMBL-EBI
 service. The default is 0.6 s spacing process-wide (about 100/min) plus a 20,000/UTC-day cap, an in-process cache, backoff on

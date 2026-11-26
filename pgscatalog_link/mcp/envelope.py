@@ -8,7 +8,8 @@ message.
 Every ``_meta`` (success AND error) carries ``tool``, ``request_id``, ``elapsed_ms``,
 ``source = "pgscatalog"``, ``capabilities_version``, ``next_commands`` and
 ``unsafe_for_clinical_use = True`` (the fleet-standard research-use disclaimer).
-Data provenance (catalog data_version, retrieved_at, licence) is in the payload.
+Data tools add ``data_version`` and ``retrieved_at`` (Response-Envelope v1.2) and publish
+their payload under ``result`` (object) or ``results`` (array); see ``mcp/tools/catalog.py``.
 """
 
 from __future__ import annotations

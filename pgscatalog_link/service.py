@@ -11,7 +11,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
-from pgscatalog_link.api.client import PgsClient
+from pgscatalog_link.api.client import FETCH_TIMES, PgsClient
 from pgscatalog_link.exceptions import InvalidInputError, NotFoundError, UpstreamSchemaError
 from pgscatalog_link.mcp.next_commands import cmd
 from pgscatalog_link.shaping import (
@@ -37,8 +37,11 @@ MAX_PERFORMANCE_LIMIT = 50
 MAX_PGS_IDS = 50
 
 
-def _now() -> str:
-    return datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
+def _retrieved_at() -> str:
+    """The oldest upstream fetch behind this call (a cache hit keeps its fetch time)."""
+    times = FETCH_TIMES.get()
+    when = datetime.fromtimestamp(min(times), UTC) if times else datetime.now(UTC)
+    return when.isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
 def _check(value: str, pattern: Any, field: str, example: str) -> str:
@@ -90,7 +93,7 @@ class PgsService:
     async def _stamp(self, payload: dict[str, Any]) -> dict[str, Any]:
         release = await self.release()
         payload["data_version"] = f"PGS Catalog release {release['data_release']}"
-        payload["retrieved_at"] = _now()
+        payload["retrieved_at"] = _retrieved_at()
         return payload
 
     async def _record(
