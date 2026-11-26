@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Annotated, Any, Literal, get_args
 
 from pydantic import Field, StrictBool, StrictInt
 
+from pgscatalog_link.api.client import FETCH_TIMES
 from pgscatalog_link.mcp.annotations import READ_ONLY_OPEN_WORLD
 from pgscatalog_link.mcp.envelope import McpErrorContext, ToolReturn, run_mcp_tool
 from pgscatalog_link.mcp.next_commands import cmd
@@ -82,11 +83,22 @@ async def _run(
     args: dict[str, Any],
     fetch: Callable[[], Awaitable[dict[str, Any]]],
     steps: Callable[[dict[str, Any]], list[dict[str, Any]]],
+    key: str,
 ) -> ToolReturn:
+    """Run a data tool; ``key`` names the service payload field published as ``result(s)``."""
+
     async def call() -> dict[str, Any]:
+        FETCH_TIMES.set([])
         payload = await fetch()
-        payload["_meta"] = {"next_commands": steps(payload)}
-        return payload
+        release = await get_pgs_service().release()
+        payload["_meta"] = {
+            "next_commands": steps(payload),
+            # Response-Envelope v1.2 provenance; the top-level copies are deprecated.
+            "data_version": release["data_release"] or release["rest_api_version"] or "live",
+            "retrieved_at": payload["retrieved_at"],
+        }
+        primary = "results" if isinstance(payload[key], list) else "result"
+        return {primary if k == key else k: v for k, v in payload.items()}
 
     return await run_mcp_tool(tool, call, context=McpErrorContext(tool, arguments=args))
 
@@ -134,6 +146,7 @@ def register_catalog_tools(mcp: FastMCP) -> None:
             args,
             lambda: get_pgs_service().resolve_trait(query, limit, offset),
             steps,
+            "traits",
         )
 
     @mcp.tool(
@@ -161,6 +174,7 @@ def register_catalog_tools(mcp: FastMCP) -> None:
             args,
             lambda: get_pgs_service().get_trait(trait_id, include_children),
             lambda p: [cmd("search_scores", trait_id=p["trait"]["id"])],
+            "trait",
         )
 
     @mcp.tool(
@@ -248,6 +262,7 @@ def register_catalog_tools(mcp: FastMCP) -> None:
                 response_mode=response_mode,
             ),
             steps,
+            "scores",
         )
 
     @mcp.tool(
@@ -272,6 +287,7 @@ def register_catalog_tools(mcp: FastMCP) -> None:
             {"pgs_id": pgs_id},
             lambda: get_pgs_service().get_score(pgs_id),
             lambda p: [cmd("get_score_performance", pgs_id=p["score"]["id"])],
+            "score",
         )
 
     @mcp.tool(
@@ -331,6 +347,7 @@ def register_catalog_tools(mcp: FastMCP) -> None:
             lambda p: (
                 _paged(p, "get_score_performance", args) or [cmd("get_score", pgs_id=p["pgs_id"])]
             ),
+            "performance",
         )
 
     @mcp.tool(
@@ -363,4 +380,5 @@ def register_catalog_tools(mcp: FastMCP) -> None:
             args,
             lambda: get_pgs_service().get_publication(publication_id, pmid, "publication"),
             lambda p: [cmd("search_scores", publication_id=p["publication"]["id"])],
+            "publication",
         )

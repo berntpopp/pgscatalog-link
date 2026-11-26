@@ -82,7 +82,7 @@ async def test_capabilities_and_diagnostics(facade: Any, call_tool: Any) -> None
 async def test_get_publication_accepts_pgp_id_or_pmid(facade: Any, call_tool: Any) -> None:
     for ref in ("PGP000001", "25855707", 25855707):
         out = await call_tool(facade, "get_publication", {"publication": ref})
-        assert out["publication"]["id"] == "PGP000001"
+        assert out["result"]["id"] == "PGP000001"
 
 
 async def test_unknown_pmid_error_names_the_publication_argument(facade: Any) -> None:
@@ -120,16 +120,16 @@ async def test_trait_name_in_trait_id_suggests_resolve_trait(facade: Any) -> Non
 
 async def test_descriptions_name_only_returned_fields(facade: Any, call_tool: Any) -> None:
     """Contract truth: the fields a description promises are in the response."""
-    trait = (await call_tool(facade, "resolve_trait", {"query": "diabetes"}))["traits"][0]
+    trait = (await call_tool(facade, "resolve_trait", {"query": "diabetes"}))["results"][0]
     assert {"id", "categories", "match", "score_count", "score_count_with_descendants"} <= set(
         trait
     )
-    detail = (await call_tool(facade, "get_trait", {"trait_id": "MONDO_0004989"}))["trait"]
+    detail = (await call_tool(facade, "get_trait", {"trait_id": "MONDO_0004989"}))["result"]
     assert {"label", "synonyms", "categories", "pgs_ids", "pgs_ids_truncated"} <= set(detail)
-    score = (await call_tool(facade, "get_score", {"pgs_id": "PGS000001"}))["score"]
+    score = (await call_tool(facade, "get_score", {"pgs_id": "PGS000001"}))["result"]
     assert {"variants_number", "license", "scoring_files"} <= set(score)
     pub = await call_tool(facade, "get_publication", {"publication": "PGP000001"})
-    assert {"developed_pgs_ids", "evaluated_pgs_ids", "title"} <= set(pub["publication"])
+    assert {"developed_pgs_ids", "evaluated_pgs_ids", "title"} <= set(pub["result"])
 
 
 async def test_trait_miss_points_to_the_fleet_disease_front_door(facade: Any) -> None:
