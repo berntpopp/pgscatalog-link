@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-11-26
+
+### Fixed
+
+- `_meta.next_commands` no longer carries the caller's unvalidated input (GTS-CORE-TXT-04): an unmatched `resolve_trait` no longer forwards the query to `mondo_resolve_disease` (the hint still names it), a trait name passed as `trait_id` is no longer forwarded to `resolve_trait`, and page steps and corrected-argument steps that repeat the caller's call are omitted when a repeated value exceeds 200 characters or contains control/format characters (new `safe_echo` helper).
+
 ## [0.5.0] - 2026-11-26
 
 ### Added

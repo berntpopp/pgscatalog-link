@@ -31,7 +31,7 @@ from pgscatalog_link.mcp.arg_help import (
     tool_signature,
 )
 from pgscatalog_link.mcp.envelope import build_arg_error_envelope
-from pgscatalog_link.mcp.next_commands import cmd
+from pgscatalog_link.mcp.next_commands import cmd, safe_echo
 
 logger = logging.getLogger(__name__)
 
@@ -117,17 +117,10 @@ class ArgValidationMiddleware(Middleware):
         )
         if constraints is not None:
             fixed = corrected_value(loc, arguments.get(loc), field_schema)
-            # Echo only real parameters, and only when nothing in them needs sanitising.
+            # Echo only real parameters, and only when they pass safe_echo (GTS-CORE-TXT-04).
             known = {k: v for k, v in arguments.items() if k in valid}
-            blob = json.dumps(known, ensure_ascii=False, default=str)
-            value = arguments.get(loc)
-            if sanitize_message(blob) != blob:
-                pass  # never echo unsanitised caller text
-            elif fixed is not None:
+            if fixed is not None and all(map(safe_echo, known.values())):
                 envelope["_meta"]["next_commands"] = [cmd(name, **{**known, loc: fixed})]
-            elif loc == "trait_id" and isinstance(value, str) and 2 <= len(value.strip()) <= 200:
-                # a trait *name* where an ontology ID belongs: resolve it first
-                envelope["_meta"]["next_commands"] = [cmd("resolve_trait", query=value.strip())]
         # ``loc`` is a caller-controlled argument name; code-point-strip it before
         # it reaches the log sink (no raw control/zero-width/bidi/NUL in logs).
         logger.warning(

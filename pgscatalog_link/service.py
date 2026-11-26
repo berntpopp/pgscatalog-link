@@ -138,7 +138,10 @@ class PgsService:
 
     @staticmethod
     def _trait_miss(term: str, items: list[dict[str, Any]]) -> NotFoundError:
-        """No label/synonym match (Envelope §2a): not_found; partial hits are weak candidates."""
+        """No label/synonym match (Envelope §2a): not_found; partial hits are weak candidates.
+
+        The unmatched term is never forwarded into a step (GTS-CORE-TXT-04).
+        """
         candidates = [{**t, "match": "weak"} for t in items]
         steps = [cmd("search_scores", trait_id=t["id"]) for t in candidates[:1]]
         if TRAIT_ID.fullmatch(term):
@@ -152,8 +155,6 @@ class PgsService:
                 "No trait matched by label or synonym; try a broader name or a synonym. For a "
                 "disease, mondo_resolve_disease gives its Mondo ID and synonyms to search with."
             )
-            # fleet front door for disease names: its labels/synonyms may match here
-            steps.append(cmd("mondo_resolve_disease", query=term))
         extra: dict[str, Any] = {"field": "query", "hint": hint, "candidates": candidates}
         if steps:
             extra["next_commands"] = steps
