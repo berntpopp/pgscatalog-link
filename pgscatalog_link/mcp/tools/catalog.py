@@ -10,7 +10,7 @@ from pydantic import Field, StrictBool, StrictInt
 from pgscatalog_link.api.client import FETCH_TIMES
 from pgscatalog_link.mcp.annotations import READ_ONLY_OPEN_WORLD
 from pgscatalog_link.mcp.envelope import McpErrorContext, ToolReturn, run_mcp_tool
-from pgscatalog_link.mcp.next_commands import cmd
+from pgscatalog_link.mcp.next_commands import cmd, safe_echo
 from pgscatalog_link.mcp.service_adapters import get_pgs_service
 from pgscatalog_link.service import (
     DEFAULT_LIMIT,
@@ -72,8 +72,8 @@ assert get_args(ResponseModeValue) == RESPONSE_MODES
 
 
 def _paged(payload: dict[str, Any], tool: str, args: dict[str, Any]) -> list[dict[str, Any]]:
-    """Next page first when truncated."""
-    if payload.get("next_offset") is not None:
+    """Next page first when truncated; omitted if a repeated argument fails ``safe_echo``."""
+    if payload.get("next_offset") is not None and all(map(safe_echo, args.values())):
         return [cmd(tool, **{**args, "offset": payload["next_offset"]})]
     return []
 

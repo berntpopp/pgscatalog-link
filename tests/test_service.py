@@ -27,9 +27,7 @@ async def test_resolve_trait_miss_is_not_found_with_next_commands(pgs_service: P
         await pgs_service.resolve_trait("zzqqxx", 3, 0)
     extra = err.value.extra
     assert extra["field"] == "query" and extra["candidates"] == [] and "broader" in extra["hint"]
-    assert extra["next_commands"] == [
-        {"tool": "mondo_resolve_disease", "arguments": {"query": "zzqqxx"}}
-    ]
+    assert "next_commands" not in extra  # unmatched text is never forwarded (GTS-CORE-TXT-04)
     assert "zzqqxx" not in err.value.message  # never echo the query into the message
 
 
@@ -46,10 +44,7 @@ async def test_resolve_trait_partial_only_is_not_found_with_weak_candidates(
     cands = err.value.extra["candidates"]
     assert [c["id"] for c in cands] == [r["id"] for r in partial]
     assert {c["match"] for c in cands} == {"weak"}
-    assert [c["tool"] for c in err.value.extra["next_commands"]] == [
-        "search_scores",
-        "mondo_resolve_disease",
-    ]
+    assert [c["tool"] for c in err.value.extra["next_commands"]] == ["search_scores"]
     assert err.value.extra["next_commands"][0]["arguments"] == {"trait_id": partial[0]["id"]}
 
 
